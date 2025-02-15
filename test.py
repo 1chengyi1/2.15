@@ -268,13 +268,14 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
             model="glm-4v-plus",
             messages=[{"role": "user", "content": input_text}]
         )
-        # 检查响应状态
-        if response.code == 200:
-            return response.data.choices[0].content
+        # 检查响应是否成功
+        if response:
+            return response.choices[0].message.content
         else:
-            return f"请求失败，错误码：{response.code}，错误信息：{response.msg}"
+            return f"请求失败，可能是网络问题或API调用异常"
     except Exception as e:
         return f"发生异常：{str(e)}"
+        
 # ==========================
 # 可视化界面模块
 # ==========================
