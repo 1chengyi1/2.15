@@ -12,3 +12,4 @@ gensim
 torch
 matplotlib
 zhipuai
+ZhipuAI
