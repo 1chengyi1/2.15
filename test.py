@@ -265,7 +265,6 @@ def process_risk_data():
 def generate_resume_and_evaluation(author, paper_records, project_records, risk_value):
     prompt = f"请为科研人员 {author} 生成一份简历和评价。该科研人员的论文不端记录如下：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录如下：{project_records.to_csv(sep='\t', na_rep='nan')}，信用风险值为 {risk_value}。"
     try:
-        # 修改调用方式
         response = zhipuai.chat.completions.create(
             model="chatglm_turbo",
             messages=[{"role": "user", "content": prompt}]
@@ -283,6 +282,16 @@ def main():
         page_icon="🔬",
         layout="wide"
     )
+
+    # 初始化 session_state
+    if 'selected_author' not in st.session_state:
+        st.session_state.selected_author = None
+    if 'author_risk' not in st.session_state:
+        st.session_state.author_risk = None
+    if 'paper_records' not in st.session_state:
+        st.session_state.paper_records = pd.DataFrame()
+    if 'project_records' not in st.session_state:
+        st.session_state.project_records = pd.DataFrame()
 
     # 自定义CSS样式
     st.markdown("""
@@ -309,7 +318,7 @@ def main():
 
     # 侧边栏控制面板上方添加智谱清言大模型按钮
     if st.sidebar.button("🧠 智谱清言生成简历和评价", help="查找科研人员后点击此按钮生成简历和评价"):
-        if 'selected_author' in st.session_state:
+        if st.session_state.selected_author is not None:
             author = st.session_state.selected_author
             author_risk = st.session_state.author_risk
             paper_records = st.session_state.paper_records
@@ -371,6 +380,7 @@ def main():
             # 保存选中的科研人员信息到 session_state
             st.session_state.selected_author = selected
             st.session_state.author_risk = author_risk
+            st.session_state.paper_records = paper_records
             st.session_state.project_records = project_records
 
             # ======================
