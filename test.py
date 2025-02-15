@@ -413,7 +413,8 @@ def main():
         # 新增：调用智谱大模型的按钮
         if st.button(f"📝 获取 {selected} 的大模型评价"):
             with st.spinner("正在调用智谱大模型进行评价..."):
-                evaluation = get_zhipu_evaluation(selected, paper_records, project_records)
+                # 修复参数传递问题，添加 risk_level 参数
+                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, risk_level)
             st.subheader("📝 智谱大模型评价")
             st.write(evaluation)
 
@@ -424,14 +425,14 @@ def main():
             def build_network_graph(author):
                 G = nx.Graph()
                 G.add_node(author)
-                
+
                 # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
                 related = papers[
                     (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
                     (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
                     (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
                 ]['姓名'].unique()
-                
+
                 for person in related:
                     if person != author:
                         reason = ''
@@ -443,7 +444,7 @@ def main():
                             reason = '不端内容相关'
                         G.add_node(person)
                         G.add_edge(author, person, label=reason)
-                
+
                 # 使用 plotly 绘制网络图
                 pos = nx.spring_layout(G, k=0.5)  # 布局
                 edge_trace = []
@@ -457,7 +458,7 @@ def main():
                         hoverinfo='text',
                         mode='lines'
                     ))
-                    
+
                     # 计算边的中点位置，用于放置标注文字
                     mid_x = (x0 + x1) / 2
                     mid_y = (y0 + y1) / 2
@@ -472,7 +473,7 @@ def main():
                             font=dict(size=10, color='black')
                         )
                     )
-                
+
                 node_trace = go.Scatter(
                     x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
                     marker=dict(
@@ -486,7 +487,7 @@ def main():
                     node_trace['x'] += tuple([x])
                     node_trace['y'] += tuple([y])
                     node_trace['text'] += tuple([node])
-                
+
                 fig = go.Figure(
                     data=edge_trace + [node_trace],
                     layout=go.Layout(
@@ -500,7 +501,7 @@ def main():
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
-        
+
             build_network_graph(selected)
 
 
