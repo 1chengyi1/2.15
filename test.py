@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 import zhipuai
 
 # 设置智谱清言 API 密钥
-zhipuai.api_key = "your_api_key"  # 请替换为你自己的 API 密钥
+zhipuai.api_key = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"  # 请替换为你自己的 API 密钥
 
 # ==========================
 # 数据预处理和风险值计算模块
@@ -76,8 +76,8 @@ def process_risk_data():
     }
 
     # 读取原始数据
-    papers_df = pd.read_excel('data3.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('data3.xlsx', sheet_name='项目')
+    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
 
     # ======================
     # 网络构建函数
