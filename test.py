@@ -13,11 +13,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import zhipuai
+import ZhipuAI
 import os
 
 # 设置智谱 API 密钥
-zhipuai.api_key = os.getenv("89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz")
+zhipuai.api_key = ZhipuAI(api_key="89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz")
 
 # ==========================
 # 数据预处理和风险值计算模块
@@ -264,7 +264,7 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
     input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}"
     try:
         response = zhipuai.model_api.invoke(
-            model=""glm-4v-plus",
+            model="glm-4v-plus",
             prompt=[{"role": "user", "content": input_text}]
         )
         if response['code'] == 200:
