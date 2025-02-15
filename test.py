@@ -134,7 +134,7 @@ def process_risk_data():
         institution_map = papers.set_index('姓名')['研究机构'].to_dict()
         for a1 in institution_map:
             for a2 in institution_map:
-                if a1!= a2 and institution_map[a1] == institution_map[a2]:
+                if a1 != a2 and institution_map[a1] == institution_map[a2]:
                     G_authors.add_edge(a1, a2, weight=1, reason='研究机构相同')
 
         return G_authors
@@ -259,25 +259,10 @@ def process_risk_data():
     }), papers_df, projects_df
 
 # 调用智谱大模型进行评价
-def get_zhipu_evaluation(selected, paper_records, project_records, risk_level):
-    # 构建输入文本，引导大模型从更多角度评价
-    input_text = f"请对科研人员 {selected} 进行详细评价，以下是详细信息：\n"
-    if not paper_records.empty:
-        first_author_papers = paper_records[paper_records['是否第一作者'] == '是']  # 假设数据中有 '是否第一作者' 列
-        input_text += f"其作为第一作者的论文不端记录为：{first_author_papers.to_csv(sep='\t', na_rep='nan')}\n"
-        other_papers = paper_records[paper_records['是否第一作者'] != '是']
-        if not other_papers.empty:
-            input_text += f"其他论文不端记录为：{other_papers.to_csv(sep='\t', na_rep='nan')}\n"
-    else:
-        input_text += "其暂无论文不端记录。\n"
-
-    if not project_records.empty:
-        input_text += f"其项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}\n"
-    else:
-        input_text += "其暂无项目不端记录。\n"
-
-    input_text += f"该科研人员的信用风险等级为 {'高风险' if risk_level == 'high' else '低风险'}。请结合国家科研诚信相关政策，分析其科研诚信情况。"
-
+def get_zhipu_evaluation(selected, paper_records, project_records, related_people):
+    # 构建输入文本
+    related_people_str = ", ".join(related_people) if related_people else "无"
+    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}。同时，请提及国家的一些科研诚信政策，并列举出与 {selected} 有关的一些人（{related_people_str}）。"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -367,6 +352,14 @@ def main():
         author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
         paper_records = papers[papers['姓名'] == selected]
         project_records = projects[projects['姓名'] == selected]
+
+        # 查找与查询作者有关的人
+        related_people = papers[
+            (papers['研究机构'] == papers[papers['姓名'] == selected]['研究机构'].iloc[0]) |
+            (papers['研究方向'] == papers[papers['姓名'] == selected]['研究方向'].iloc[0]) |
+            (papers['不端内容'] == papers[papers['姓名'] == selected]['不端内容'].iloc[0])
+        ]['姓名'].unique()
+        related_people = [person for person in related_people if person != selected]
 
         # ======================
         # 信息展示
