@@ -1,4 +1,257 @@
-import requests  # 用于调用API
+import streamlit as st
+import pandas as pd
+import networkx as nx
+import numpy as np
+import random
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+import plotly.graph_objects as go
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+import requests  # 用于调用智谱清言大模型API
+
+# ==========================
+# 数据预处理和风险值计算模块
+# ==========================
+@st.cache_data(show_spinner=False)
+def process_risk_data():
+    # 不端原因严重性权重
+    misconduct_weights = {
+        '伪造、篡改图片': 6,
+        '篡改图片': 3,
+        '篡改数据': 3,
+        '篡改数据、图片': 6,
+        '编造研究过程': 4,
+        '编造研究过程、不当署名': 7,
+        '篡改数据、不当署名': 6,
+        '伪造通讯作者邮箱': 2,
+        '实验流程不规范': 2,
+        '数据审核不严': 2,
+        '署名不当、实验流程不规范': 5,
+        '篡改数据、代写代投、伪造通讯作者邮箱、不当署名': 13,
+        '篡改数据、伪造通讯作者邮箱、不当署名': 8,
+        '第三方代写、伪造通讯作者邮箱': 7,
+        '第三方代写代投、伪造数据': 8,
+        '一稿多投': 2,
+        '第三方代写代投、伪造数据、一稿多投': 10,
+        '篡改数据、剽窃': 8,
+        '伪造图片': 3,
+        '伪造图片、不当署名': 6,
+        '委托实验、不当署名': 6,
+        '伪造数据': 3,
+        '伪造数据、篡改图片': 6,
+        '伪造数据、不当署名、伪造通讯作者邮箱等': 8,
+        '伪造数据、一图多用、伪造图片、代投问题': 14,
+        '伪造数据、署名不当': 6,
+        '抄袭剽窃他人项目申请书内容': 6,
+        '伪造通讯作者邮箱、篡改数据和图片': 8,
+        '篡改数据、不当署名': 6,
+        '抄袭他人基金项目申请书': 6,
+        '结题报告中存在虚假信息': 5,
+        '抄袭剽窃': 5,
+        '造假、抄袭': 5,
+        '第三方代写代投': 5,
+        '署名不当': 3,
+        '第三方代写代投、署名不当': 8,
+        '抄袭剽窃、伪造数据': 8,
+        '买卖图片数据': 3,
+        '买卖数据': 3,
+        '买卖论文': 5,
+        '买卖论文、不当署名': 8,
+        '买卖论文数据': 8,
+        '买卖论文数据、不当署名': 11,
+        '买卖图片数据、不当署名': 6,
+        '图片不当使用、伪造数据': 6,
+        '图片不当使用、数据造假、未经同意使用他人署名': 9,
+        '图片不当使用、数据造假、未经同意使用他人署名、编造研究过程': 13,
+        '图片造假、不当署名': 9,
+        '图片造假、不当署名、伪造通讯作者邮箱等': 11,
+        '买卖数据、不当署名': 6,
+        '伪造论文、不当署名': 6,
+        '其他轻微不端行为': 1
+    }
+
+    # 读取原始数据
+    papers_df = pd.read_excel('data3.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('data3.xlsx', sheet_name='项目')
+
+    # ======================
+    # 网络构建函数
+    # ======================
+    def build_networks(papers, projects):
+        # 作者-论文网络
+        G_papers = nx.Graph()
+        for _, row in papers.iterrows():
+            authors = [row['姓名']]
+            weight = misconduct_weights.get(row['不端原因'], 1)
+            G_papers.add_edge(row['姓名'], row['不端内容'], weight=weight)
+
+        # 作者-项目网络
+        G_projects = nx.Graph()
+        for _, row in projects.iterrows():
+            authors = [row['姓名']]
+            weight = misconduct_weights.get(row['不端原因'], 1)
+            G_projects.add_edge(row['姓名'], row['不端内容'], weight=weight)
+
+        # 作者-作者网络
+        G_authors = nx.Graph()
+
+        # 共同项目/论文连接
+        for df in [papers, projects]:
+            for _, row in df.iterrows():
+                authors = [row['姓名']]
+                weight = misconduct_weights.get(row['不端原因'], 1)
+                for i in range(len(authors)):
+                    for j in range(i + 1, len(authors)):
+                        if G_authors.has_edge(authors[i], authors[j]):
+                            G_authors[authors[i]][authors[j]]['weight'] += weight
+                        else:
+                            G_authors.add_edge(authors[i], authors[j], weight=weight)
+
+        # 研究方向相似性连接
+        research_areas = papers.groupby('姓名')['研究方向'].apply(lambda x: ' '.join(x)).reset_index()
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform(research_areas['研究方向'])
+        similarity_matrix = cosine_similarity(tfidf_matrix)
+
+        for i in range(len(research_areas)):
+            for j in range(i + 1, len(research_areas)):
+                if similarity_matrix[i, j] > 0.7:
+                    a1 = research_areas.iloc[i]['姓名']
+                    a2 = research_areas.iloc[j]['姓名']
+                    G_authors.add_edge(a1, a2, weight=similarity_matrix[i, j], reason='研究方向相似')
+
+        # 共同机构连接
+        institution_map = papers.set_index('姓名')['研究机构'].to_dict()
+        for a1 in institution_map:
+            for a2 in institution_map:
+                if a1 != a2 and institution_map[a1] == institution_map[a2]:
+                    G_authors.add_edge(a1, a2, weight=1, reason='研究机构相同')
+
+        return G_authors
+
+    # ======================
+    # Word2Vec（Skip-gram）模型定义
+    # ======================
+    class SkipGramModel(nn.Module):
+        def __init__(self, vocab_size, embedding_size):
+            super(SkipGramModel, self).__init__()
+            self.embeddings = nn.Embedding(vocab_size, embedding_size)
+            self.out = nn.Linear(embedding_size, vocab_size)
+
+        def forward(self, inputs):
+            embeds = self.embeddings(inputs)
+            outputs = self.out(embeds)
+            return outputs
+
+    # ======================
+    # 数据集定义
+    # ======================
+    class SkipGramDataset(Dataset):
+        def __init__(self, walks, node2id):
+            self.walks = walks
+            self.node2id = node2id
+
+        def __len__(self):
+            return len(self.walks)
+
+        def __getitem__(self, idx):
+            walk = self.walks[idx]
+            input_ids = [self.node2id[node] for node in walk[:-1]]
+            target_ids = [self.node2id[node] for node in walk[1:]]
+            return torch.tensor(input_ids), torch.tensor(target_ids)
+
+    # ======================
+    # DeepWalk实现
+    # ======================
+    def deepwalk(graph, walk_length=30, num_walks=200, embedding_size=128):
+        walks = []
+        nodes = list(graph.nodes())
+
+        for _ in range(num_walks):
+            random.shuffle(nodes)
+            for node in nodes:
+                walk = [str(node)]
+                current = node
+                for _ in range(walk_length - 1):
+                    neighbors = list(graph.neighbors(current))
+                    if neighbors:
+                        current = random.choice(neighbors)
+                        walk.append(str(current))
+                    else:
+                        break
+                walks.append(walk)
+
+        # 构建节点到ID的映射
+        node2id = {node: idx for idx, node in enumerate(set([node for walk in walks for node in walk]))}
+        id2node = {idx: node for node, idx in node2id.items()}
+
+        # 构建数据集
+        dataset = SkipGramDataset(walks, node2id)
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+        # 模型初始化
+        model = SkipGramModel(len(node2id), embedding_size)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+        # 训练模型
+        for epoch in range(10):
+            for inputs, targets in dataloader:
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs.view(-1, len(node2id)), targets.view(-1))
+                loss.backward()
+                optimizer.step()
+
+        # 获取嵌入
+        embeddings = {}
+        with torch.no_grad():
+            for node, idx in node2id.items():
+                embeddings[node] = model.embeddings(torch.tensor([idx])).squeeze().numpy()
+
+        return embeddings
+
+    # ======================
+    # 执行计算流程
+    # ======================
+    with st.spinner('正在构建合作网络...'):
+        G_authors = build_networks(papers_df, projects_df)
+
+    with st.spinner('正在训练DeepWalk模型...'):
+        embeddings = deepwalk(G_authors)
+
+    with st.spinner('正在计算风险指标...'):
+        # 构建分类数据集
+        X, y = [], []
+        for edge in G_authors.edges():
+            X.append(np.concatenate([embeddings[edge[0]], embeddings[edge[1]]]))
+            y.append(1)
+
+        non_edges = list(nx.non_edges(G_authors))
+        non_edges = random.sample(non_edges, len(y))
+        for edge in non_edges:
+            X.append(np.concatenate([embeddings[edge[0]], embeddings[edge[1]]]))
+            y.append(0)
+
+        # 训练分类器
+        X = np.array(X)
+        y = np.array(y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+        clf = RandomForestClassifier(n_estimators=100)
+        clf.fit(X_train, y_train)
+
+        # 计算节点风险值
+        risk_scores = {node: np.linalg.norm(emb) for node, emb in embeddings.items()}
+
+    return pd.DataFrame({
+        '作者': list(risk_scores.keys()),
+        '风险值': list(risk_scores.values())
+    }), papers_df, projects_df
 
 # ==========================
 # 智谱清言大模型API调用函数
@@ -6,7 +259,7 @@ import requests  # 用于调用API
 def generate_research_report(author_name, papers, projects):
     # 假设智谱清言大模型的API端点和API密钥
     API_URL = "https://api.zhiqingyan.com/generate_report"
-    API_KEY = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"
+    API_KEY = "your_api_key_here"
     
     # 准备请求数据
     data = {
@@ -28,7 +281,47 @@ def generate_research_report(author_name, papers, projects):
 # 可视化界面模块
 # ==========================
 def main():
-    # ...（之前的代码保持不变）
+    st.set_page_config(
+        page_title="科研诚信分析平台",
+        page_icon="🔬",
+        layout="wide"
+    )
+
+    # 自定义CSS样式
+    st.markdown("""
+    <style>
+    .high-risk { color: red; font-weight: bold; animation: blink 1s infinite; }
+    @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
+    .metric-box { padding: 20px; border-radius: 10px; background: #f0f2f6; margin: 10px; }
+    table { table-layout: fixed; }
+    table td { white-space: normal; }
+    .stDataFrame tbody tr { display: block; overflow-y: auto; height: 200px; }
+    .stDataFrame tbody { display: block; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 侧边栏控制面板
+    with st.sidebar:
+        st.title("控制面板")
+        if st.button("🔄 重新计算风险值", help="当原始数据更新后点击此按钮"):
+            with st.spinner("重新计算中..."):
+                risk_df, papers, projects = process_risk_data()
+                risk_df.to_excel('risk_scores.xlsx', index=False)
+            st.success("风险值更新完成！")
+    
+        # 添加“返回首页”按钮
+        if st.button("🏠 返回首页", help="点击返回首页"):
+            st.markdown("[点击这里返回首页](https://chengyi10.wordpress.com/)", unsafe_allow_html=True)
+
+    # 尝试加载现有数据
+    try:
+        risk_df = pd.read_excel('risk_scores.xlsx')
+        papers = pd.read_excel('data3.xlsx', sheet_name='论文')
+        projects = pd.read_excel('data3.xlsx', sheet_name='项目')
+    except:
+        with st.spinner("首次运行需要初始化数据..."):
+            risk_df, papers, projects = process_risk_data()
+            risk_df.to_excel('risk_scores.xlsx', index=False)
 
     # 主界面
     st.title("🔍 科研人员信用风险分析系统")
@@ -92,7 +385,88 @@ def main():
         # 关系网络可视化
         # ======================
         with st.expander("🕸️ 展开合作关系网络", expanded=True):
+            def build_network_graph(author):
+                G = nx.Graph()
+                G.add_node(author)
+                
+                # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
+                related = papers[
+                    (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
+                    (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
+                    (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
+                ]['姓名'].unique()
+                
+                for person in related:
+                    if person != author:
+                        reason = ''
+                        if papers[(papers['姓名'] == author) & (papers['研究机构'] == papers[papers['姓名'] == person]['研究机构'].iloc[0])].shape[0] > 0:
+                            reason = '研究机构相同'
+                        elif papers[(papers['姓名'] == author) & (papers['研究方向'] == papers[papers['姓名'] == person]['研究方向'].iloc[0])].shape[0] > 0:
+                            reason = '研究方向相似'
+                        else:
+                            reason = '不端内容相关'
+                        G.add_node(person)
+                        G.add_edge(author, person, label=reason)
+                
+                # 使用 plotly 绘制网络图
+                pos = nx.spring_layout(G, k=0.5)  # 布局
+                edge_trace = []
+                edge_annotations = []  # 用于存储边的标注信息
+                for edge in G.edges(data=True):
+                    x0, y0 = pos[edge[0]]
+                    x1, y1 = pos[edge[1]]
+                    edge_trace.append(go.Scatter(
+                        x=[x0, x1, None], y=[y0, y1, None],
+                        line=dict(width=0.5, color='#888'),
+                        hoverinfo='text',
+                        mode='lines'
+                    ))
+                    
+                    # 计算边的中点位置，用于放置标注文字
+                    mid_x = (x0 + x1) / 2
+                    mid_y = (y0 + y1) / 2
+                    edge_annotations.append(
+                        dict(
+                            x=mid_x,
+                            y=mid_y,
+                            xref='x',
+                            yref='y',
+                            text=edge[2]['label'],  # 相连的原因作为标注文字
+                            showarrow=False,
+                            font=dict(size=10, color='black')
+                        )
+                    )
+                
+                node_trace = go.Scatter(
+                    x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
+                    marker=dict(
+                        showscale=True,
+                        colorscale='YlGnBu',
+                        size=10,
+                    )
+                )
+                for node in G.nodes():
+                    x, y = pos[node]
+                    node_trace['x'] += tuple([x])
+                    node_trace['y'] += tuple([y])
+                    node_trace['text'] += tuple([node])
+                
+                fig = go.Figure(
+                    data=edge_trace + [node_trace],
+                    layout=go.Layout(
+                        title='<br>合作关系网络图',
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=20, l=5, r=5, t=40),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        annotations=edge_annotations  # 添加边的标注信息
+                    )
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
             build_network_graph(selected)
 
+
 if __name__ == "__main__":
-    main()
+    main()    
