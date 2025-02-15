@@ -260,8 +260,20 @@ def process_risk_data():
 
 # 调用智谱大模型进行评价
 def get_zhipu_evaluation(selected, paper_records, project_records, all_papers, all_projects):
-    # 构建输入文本，让大模型根据所有数据找出相关人名
-    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}。请根据以下所有论文数据：{all_papers.to_csv(sep='\t', na_rep='nan')} 和所有项目数据：{all_projects.to_csv(sep='\t', na_rep='nan')}，分析并列举出与 {selected} 有关的具体人名。同时，请提及国家的一些科研诚信政策。"
+    # 筛选与查询作者相关度较高的数据
+    related_papers = all_papers[
+        (all_papers['研究机构'] == all_papers[all_papers['姓名'] == selected]['研究机构'].iloc[0]) |
+        (all_papers['研究方向'] == all_papers[all_papers['姓名'] == selected]['研究方向'].iloc[0]) |
+        (all_papers['不端内容'] == all_papers[all_papers['姓名'] == selected]['不端内容'].iloc[0])
+    ]
+    related_projects = all_projects[
+        (all_projects['研究机构'] == all_projects[all_projects['姓名'] == selected]['研究机构'].iloc[0]) |
+        (all_projects['研究方向'] == all_projects[all_projects['姓名'] == selected]['研究方向'].iloc[0]) |
+        (all_projects['不端内容'] == all_projects[all_projects['姓名'] == selected]['不端内容'].iloc[0])
+    ]
+
+    # 构建输入文本，让大模型根据相关数据找出相关人名
+    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}。请根据以下相关论文数据：{related_papers.to_csv(sep='\t', na_rep='nan')} 和相关项目数据：{related_projects.to_csv(sep='\t', na_rep='nan')}，分析并列举出与 {selected} 有关的具体人名。同时，请提及国家的一些科研诚信政策。"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -388,7 +400,8 @@ def main():
         st.subheader("📊 风险分析")
         risk_level = "high" if author_risk > 12 else "low"
         cols = st.columns(4)
-        cols[0].metric("信用风险值", f"{author_risk:.2f}",
+        cols[0].metric("信用风险值",
+                       f"{author_risk:.2f}",
                        delta_color="inverse" if risk_level == "high" else "normal")
         cols[1].metric("风险等级",
                        f"{'⚠️ 高风险' if risk_level == 'high' else '✅ 低风险'}",
