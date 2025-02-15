@@ -76,8 +76,8 @@ def process_risk_data():
     }
 
     # 读取原始数据
-    papers_df = pd.read_excel('data3.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('data3.xlsx', sheet_name='项目')
+    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
 
     # ======================
     # 网络构建函数
@@ -259,7 +259,7 @@ def process_risk_data():
 def generate_research_report(author_name, papers, projects):
     # 假设智谱清言大模型的API端点和API密钥
     API_URL = "https://api.zhiqingyan.com/generate_report"
-    API_KEY = "your_api_key_here"
+    API_KEY = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"
     
     # 准备请求数据
     data = {
