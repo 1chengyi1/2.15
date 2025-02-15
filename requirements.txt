@@ -1,3 +1,13 @@
-streamlit  
-mysql-connector-python  
+streamlit
 pandas
+networkx
+numpy
+scikit-learn
+node2vec
+plotly
+openpyxl
+setuptools
+scipy
+gensim
+torch
+matplotlib
