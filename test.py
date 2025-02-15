@@ -7,12 +7,16 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score, average_precision_score
 import plotly.graph_objects as go
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import requests  # 用于调用智谱清言大模型API
+import zhipuai
+
+# 设置智谱清言 API 密钥
+zhipuai.api_key = "your_api_key"  # 请替换为你自己的 API 密钥
 
 # ==========================
 # 数据预处理和风险值计算模块
@@ -76,8 +80,8 @@ def process_risk_data():
     }
 
     # 读取原始数据
-    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+    papers_df = pd.read_excel('data3.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('data3.xlsx', sheet_name='项目')
 
     # ======================
     # 网络构建函数
@@ -254,30 +258,6 @@ def process_risk_data():
     }), papers_df, projects_df
 
 # ==========================
-# 智谱清言大模型API调用函数
-# ==========================
-def generate_research_report(author_name, papers, projects):
-    # 假设智谱清言大模型的API端点和API密钥
-    API_URL = "https://api.zhiqingyan.com/generate_report"
-    API_KEY = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"
-    
-    # 准备请求数据
-    data = {
-        "author_name": author_name,
-        "papers": papers.to_dict(orient='records'),
-        "projects": projects.to_dict(orient='records'),
-        "api_key": API_KEY
-    }
-    
-    # 发送请求
-    response = requests.post(API_URL, json=data)
-    
-    if response.status_code == 200:
-        return response.json().get("report", "无法生成报告")
-    else:
-        return "请求失败，无法生成报告"
-
-# ==========================
 # 可视化界面模块
 # ==========================
 def main():
@@ -290,13 +270,23 @@ def main():
     # 自定义CSS样式
     st.markdown("""
     <style>
-    .high-risk { color: red; font-weight: bold; animation: blink 1s infinite; }
+.high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
     @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
-    .metric-box { padding: 20px; border-radius: 10px; background: #f0f2f6; margin: 10px; }
-    table { table-layout: fixed; }
-    table td { white-space: normal; }
-    .stDataFrame tbody tr { display: block; overflow-y: auto; height: 200px; }
-    .stDataFrame tbody { display: block; }
+.metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
+    table {
+        table - layout: fixed;
+    }
+    table td {
+        white - space: normal;
+    }
+ .stDataFrame tbody tr {
+        display: block;
+        overflow - y: auto;
+        height: 200px;
+    }
+ .stDataFrame tbody {
+        display: block;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -308,7 +298,7 @@ def main():
                 risk_df, papers, projects = process_risk_data()
                 risk_df.to_excel('risk_scores.xlsx', index=False)
             st.success("风险值更新完成！")
-    
+
         # 添加“返回首页”按钮
         if st.button("🏠 返回首页", help="点击返回首页"):
             st.markdown("[点击这里返回首页](https://chengyi10.wordpress.com/)", unsafe_allow_html=True)
@@ -349,13 +339,27 @@ def main():
         # ======================
         st.subheader("📄 论文记录")
         if not paper_records.empty:
+            # 添加竖向滚动条
+            st.markdown(
+                """
+                <style>
+                .scrollable-table {
+                    max-height: 300px;  /* 设置最大高度 */
+                    overflow-y: auto;   /* 添加竖向滚动条 */
+                    display: block;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+            # 将 DataFrame 转换为 HTML，并添加滚动条样式
             st.markdown(
                 f'<div class="scrollable-table">{paper_records.to_html(escape=False, index=False)}</div>',
                 unsafe_allow_html=True
             )
         else:
             st.info("暂无论文不端记录")
-        
+
         st.subheader("📋 项目记录")
         if not project_records.empty:
             st.markdown(project_records.to_html(escape=False), unsafe_allow_html=True)
@@ -373,29 +377,20 @@ def main():
                        help="高风险阈值：12")
 
         # ======================
-        # 智谱清言大模型生成报告
-        # ======================
-        if st.button("📝 生成科研诚信报告（智谱清言大模型）"):
-            with st.spinner("正在生成报告..."):
-                report = generate_research_report(selected, paper_records, project_records)
-                st.subheader("📜 科研诚信报告")
-                st.write(report)
-
-        # ======================
         # 关系网络可视化
         # ======================
         with st.expander("🕸️ 展开合作关系网络", expanded=True):
             def build_network_graph(author):
                 G = nx.Graph()
                 G.add_node(author)
-                
+
                 # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
                 related = papers[
                     (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
                     (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
                     (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
                 ]['姓名'].unique()
-                
+
                 for person in related:
                     if person != author:
                         reason = ''
@@ -407,7 +402,7 @@ def main():
                             reason = '不端内容相关'
                         G.add_node(person)
                         G.add_edge(author, person, label=reason)
-                
+
                 # 使用 plotly 绘制网络图
                 pos = nx.spring_layout(G, k=0.5)  # 布局
                 edge_trace = []
@@ -421,7 +416,7 @@ def main():
                         hoverinfo='text',
                         mode='lines'
                     ))
-                    
+
                     # 计算边的中点位置，用于放置标注文字
                     mid_x = (x0 + x1) / 2
                     mid_y = (y0 + y1) / 2
@@ -436,7 +431,7 @@ def main():
                             font=dict(size=10, color='black')
                         )
                     )
-                
+
                 node_trace = go.Scatter(
                     x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
                     marker=dict(
@@ -450,7 +445,7 @@ def main():
                     node_trace['x'] += tuple([x])
                     node_trace['y'] += tuple([y])
                     node_trace['text'] += tuple([node])
-                
+
                 fig = go.Figure(
                     data=edge_trace + [node_trace],
                     layout=go.Layout(
@@ -464,9 +459,35 @@ def main():
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
-        
+
             build_network_graph(selected)
+
+        # 智谱清言大模型按钮
+        if st.button("📝 生成科研诚信报告"):
+            with st.spinner("正在生成科研诚信报告，请稍候..."):
+                # 准备提示信息
+                prompt = f"请根据以下信息生成一份关于科研人员 {selected} 的科研诚信报告和评价。"
+                if not paper_records.empty:
+                    prompt += f"该科研人员的论文不端记录有：{paper_records.to_csv(sep='\t', na_rep='nan')}。"
+                if not project_records.empty:
+                    prompt += f"该科研人员的项目不端记录有：{project_records.to_csv(sep='\t', na_rep='nan')}。"
+                prompt += f"该科研人员的信用风险值为 {author_risk:.2f}，风险等级为 {'高风险' if risk_level == 'high' else '低风险'}。"
+
+                # 调用智谱清言 API
+                try:
+                    response = zhipuai.model_api.invoke(
+                        model="chatglm_pro",
+                        prompt=[{"role": "user", "content": prompt}]
+                    )
+                    if response['code'] == 200:
+                        report = response['data']['choices'][0]['content']
+                        st.subheader("📄 科研诚信报告")
+                        st.write(report)
+                    else:
+                        st.error(f"调用智谱清言 API 失败，错误信息：{response['msg']}")
+                except Exception as e:
+                    st.error(f"发生未知错误：{e}")
 
 
 if __name__ == "__main__":
-    main()    
+    main()
