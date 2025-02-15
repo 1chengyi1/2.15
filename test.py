@@ -18,7 +18,7 @@ import json
 
 # 设置 DeepSeek API 相关信息
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
-DEEPSEEK_API_KEY = st.secrets["deepseek"]["sk-405a37fab25149149e08b258f081e09b"]
+DEEPSEEK_API_KEY = st.secrets["chengyi"]["sk-405a37fab25149149e08b258f081e09b"]
 
 # ==========================
 # 数据预处理和风险值计算模块
