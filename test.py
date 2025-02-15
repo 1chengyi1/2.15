@@ -485,7 +485,7 @@ def main():
                         )
                     )
                     st.plotly_chart(fig, use_container_width=True)
-                build_network_graph(selected)
+            build_network_graph(selected)
 
         # ======================
         # 调用大模型进行风险评估分析
