@@ -485,7 +485,6 @@ def main():
                         )
                     )
                     st.plotly_chart(fig, use_container_width=True)
-
                 build_network_graph(selected)
 
         # ======================
