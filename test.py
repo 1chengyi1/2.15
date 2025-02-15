@@ -397,8 +397,7 @@ def main():
         # 新增：调用智谱大模型的按钮
         if st.button(f"📝 获取 {selected} 的大模型评价"):
             with st.spinner("正在调用智谱大模型进行评价..."):
-                # 修复参数传递问题，添加 risk_level 参数
-                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, risk_level)
+                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, papers, projects)
             st.subheader("📝 智谱大模型评价")
             st.write(evaluation)
 
