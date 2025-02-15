@@ -369,7 +369,6 @@ def main():
         # 模糊匹配
         if risk_df is not None:
             candidates = risk_df[risk_df['作者'].str.contains(search_term)]
-            if len(candidates) ==
             if len(candidates) == 0:
                     st.warning("未找到匹配的研究人员")
                     return
