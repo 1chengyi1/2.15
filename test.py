@@ -17,7 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 import openai
 
 # 设置 OpenAI API 密钥
-openai.api_key = st.secrets["openai"]["sk-405a37fab25149149e08b258f081e09b"]
+openai.api_key = st.secrets["deepseek"]["sk-405a37fab25149149e08b258f081e09b"]
 
 # ==========================
 # 数据预处理和风险值计算模块
