@@ -259,6 +259,7 @@ def process_risk_data():
     }), papers_df, projects_df
 
 # 调用智谱大模型进行评价
+# 调用智谱大模型进行评价
 def get_zhipu_evaluation(selected, paper_records, project_records):
     # 构建输入文本
     input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}"
@@ -267,13 +268,13 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
             model="glm-4v-plus",
             messages=[{"role": "user", "content": input_text}]
         )
-        if response['code'] == 200:
-            return response['data']['choices'][0]['content']
+        # 检查响应状态
+        if response.code == 200:
+            return response.data.choices[0].content
         else:
-            return f"请求失败，错误码：{response['code']}，错误信息：{response['msg']}"
+            return f"请求失败，错误码：{response.code}，错误信息：{response.msg}"
     except Exception as e:
         return f"发生异常：{str(e)}"
-
 # ==========================
 # 可视化界面模块
 # ==========================
