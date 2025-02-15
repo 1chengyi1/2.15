@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 import zhipuai
 
 # 设置智谱清言 API 密钥
-zhipuai.api_key = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"  # 请替换为你自己的 API 密钥
+zhipuai.api_key = "your_api_key"  # 请替换为你自己的 API 密钥
 
 # ==========================
 # 数据预处理和风险值计算模块
@@ -80,8 +80,8 @@ def process_risk_data():
     }
 
     # 读取原始数据
-    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+    papers_df = pd.read_excel('data3.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('data3.xlsx', sheet_name='项目')
 
     # ======================
     # 网络构建函数
@@ -473,18 +473,18 @@ def main():
                     prompt += f"该科研人员的项目不端记录有：{project_records.to_csv(sep='\t', na_rep='nan')}。"
                 prompt += f"该科研人员的信用风险值为 {author_risk:.2f}，风险等级为 {'高风险' if risk_level == 'high' else '低风险'}。"
 
-                # 调用智谱清言 API
                 try:
-                    response = zhipuai.model_api.invoke(
+                    # 调用智谱清言 API
+                    response = zhipuai.chat.completion.create(
                         model="chatglm_pro",
-                        prompt=[{"role": "user", "content": prompt}]
+                        messages=[{"role": "user", "content": prompt}]
                     )
-                    if response['code'] == 200:
-                        report = response['data']['choices'][0]['content']
+                    if response.get('code') == 200:
+                        report = response['data']['choices'][0]['message']['content']
                         st.subheader("📄 科研诚信报告")
                         st.write(report)
                     else:
-                        st.error(f"调用智谱清言 API 失败，错误信息：{response['msg']}")
+                        st.error(f"调用智谱清言 API 失败，错误信息：{response.get('msg', '未知错误')}")
                 except Exception as e:
                     st.error(f"发生未知错误：{e}")
 
