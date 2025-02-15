@@ -15,8 +15,8 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import zhipuai
 
-# 设置智谱清言的 API Key
-zhipuai.api_key = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"  # 替换为你自己的 API Key
+# 设置智谱清言 API 密钥
+zhipuai.api_key = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"  # 请替换为你自己的 API 密钥
 
 # ==========================
 # 数据预处理和风险值计算模块
@@ -80,8 +80,8 @@ def process_risk_data():
     }
 
     # 读取原始数据
-    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+    papers_df = pd.read_excel('data3.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('data3.xlsx', sheet_name='项目')
 
     # ======================
     # 网络构建函数
@@ -257,21 +257,17 @@ def process_risk_data():
         '风险值': list(risk_scores.values())
     }), papers_df, projects_df
 
-# 调用智谱清言大模型进行评价
-def get_zhipu_evaluation(author, paper_records, project_records):
-    # 构建输入文本
-    input_text = f"请对科研人员 {author} 进行评价，该人员有以下论文不端记录：{paper_records.to_csv(sep=';', na_rep='nan')}，项目不端记录：{project_records.to_csv(sep=';', na_rep='nan')}。"
-    try:
-        response = zhipuai.model_api.invoke(
-            model="chatglm_pro",
-            prompt=[{"role": "user", "content": input_text}]
-        )
-        if response['code'] == 200:
-            return response['data']['choices'][0]['content']
-        else:
-            return f"调用智谱清言 API 失败，错误代码：{response['code']}，错误信息：{response['msg']}"
-    except Exception as e:
-        return f"调用智谱清言 API 时出现异常：{str(e)}"
+# 调用智谱清言 API 生成简历和评价
+def generate_resume_and_evaluation(author, paper_records, project_records, risk_value):
+    prompt = f"请为科研人员 {author} 生成一份简历和评价。该科研人员的论文不端记录如下：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录如下：{project_records.to_csv(sep='\t', na_rep='nan')}，信用风险值为 {risk_value}。"
+    response = zhipuai.model_api.invoke(
+        model="chatglm_turbo",
+        prompt=[{"role": "user", "content": prompt}]
+    )
+    if response['code'] == 200:
+        return response['data']['choices'][0]['content']
+    else:
+        return f"请求失败，错误代码：{response['code']}，错误信息：{response['msg']}"
 
 # ==========================
 # 可视化界面模块
@@ -306,68 +302,48 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
+    # 侧边栏控制面板上方添加智谱清言大模型按钮
+    if st.sidebar.button("🧠 智谱清言生成简历和评价", help="查找科研人员后点击此按钮生成简历和评价"):
+        if 'selected_author' in st.session_state:
+            author = st.session_state.selected_author
+            author_risk = st.session_state.author_risk
+            paper_records = st.session_state.paper_records
+            project_records = st.session_state.project_records
+            with st.spinner("正在调用智谱清言生成简历和评价..."):
+                result = generate_resume_and_evaluation(author, paper_records, project_records, author_risk)
+            st.subheader("📋 智谱清言生成的简历和评价")
+            st.write(result)
+        else:
+            st.warning("请先搜索并选择一个科研人员")
+
     # 侧边栏控制面板
     with st.sidebar:
         st.title("控制面板")
         if st.button("🔄 重新计算风险值", help="当原始数据更新后点击此按钮"):
             with st.spinner("重新计算中..."):
-                try:
-                    risk_df, papers, projects = process_risk_data()
-                    risk_df.to_excel('risk_scores.xlsx', index=False)
-                    st.success("风险值更新完成！")
-                except Exception as e:
-                    st.error(f"重新计算风险值时出现错误：{str(e)}")
+                risk_df, papers, projects = process_risk_data()
+                risk_df.to_excel('risk_scores.xlsx', index=False)
+            st.success("风险值更新完成！")
 
         # 添加“返回首页”按钮
         if st.button("🏠 返回首页", help="点击返回首页"):
             st.markdown("[点击这里返回首页](https://chengyi10.wordpress.com/)", unsafe_allow_html=True)
-
-        # 添加调用智谱清言大模型的按钮
-        if st.button("🤖 调用智谱清言评价", help="对查找的人员进行大模型评价"):
-            search_term = st.session_state.get('search_term', '')
-            if search_term:
-                try:
-                    # 模糊匹配
-                    candidates = risk_df[risk_df['作者'].str.contains(search_term)]
-                    if len(candidates) > 0:
-                        # 直接选择第一个匹配人员
-                        selected = candidates['作者'].iloc[0]
-
-                        # 获取详细信息
-                        author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
-                        paper_records = papers[papers['姓名'] == selected]
-                        project_records = projects[projects['姓名'] == selected]
-
-                        with st.spinner("正在调用智谱清言进行评价..."):
-                            evaluation = get_zhipu_evaluation(selected, paper_records, project_records)
-                        st.markdown(f"### 智谱清言评价\n{evaluation}")
-                    else:
-                        st.warning("未找到匹配的研究人员，请先进行搜索。")
-                except NameError:
-                    st.warning("请先加载或重新计算风险值。")
-            else:
-                st.warning("请先输入研究人员姓名进行搜索。")
 
     # 尝试加载现有数据
     try:
         risk_df = pd.read_excel('risk_scores.xlsx')
         papers = pd.read_excel('data3.xlsx', sheet_name='论文')
         projects = pd.read_excel('data3.xlsx', sheet_name='项目')
-    except Exception as e:
-        try:
-            with st.spinner("首次运行需要初始化数据..."):
-                risk_df, papers, projects = process_risk_data()
-                risk_df.to_excel('risk_scores.xlsx', index=False)
-        except Exception as e:
-            st.error(f"数据加载和重新计算均失败：{str(e)}")
-            return
+    except:
+        with st.spinner("首次运行需要初始化数据..."):
+            risk_df, papers, projects = process_risk_data()
+            risk_df.to_excel('risk_scores.xlsx', index=False)
 
     # 主界面
     st.title("🔍 科研人员信用风险预警系统")
 
     # 搜索框
     search_term = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...")
-    st.session_state.search_term = search_term
 
     if search_term:
         # 模糊匹配
@@ -383,6 +359,12 @@ def main():
         author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
         paper_records = papers[papers['姓名'] == selected]
         project_records = projects[projects['姓名'] == selected]
+
+        # 保存选中的科研人员信息到 session_state
+        st.session_state.selected_author = selected
+        st.session_state.author_risk = author_risk
+        st.session_state.paper_records = paper_records
+        st.session_state.project_records = project_records
 
         # ======================
         # 信息展示
@@ -409,7 +391,7 @@ def main():
             )
         else:
             st.info("暂无论文不端记录")
-        
+
         st.subheader("📋 项目记录")
         if not project_records.empty:
             st.markdown(project_records.to_html(escape=False), unsafe_allow_html=True)
@@ -433,14 +415,14 @@ def main():
             def build_network_graph(author):
                 G = nx.Graph()
                 G.add_node(author)
-                
+
                 # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
                 related = papers[
                     (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
                     (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
                     (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
                 ]['姓名'].unique()
-                
+
                 for person in related:
                     if person != author:
                         reason = ''
@@ -452,7 +434,7 @@ def main():
                             reason = '不端内容相关'
                         G.add_node(person)
                         G.add_edge(author, person, label=reason)
-                
+
                 # 使用 plotly 绘制网络图
                 pos = nx.spring_layout(G, k=0.5)  # 布局
                 edge_trace = []
@@ -466,7 +448,7 @@ def main():
                         hoverinfo='text',
                         mode='lines'
                     ))
-                    
+
                     # 计算边的中点位置，用于放置标注文字
                     mid_x = (x0 + x1) / 2
                     mid_y = (y0 + y1) / 2
@@ -481,7 +463,7 @@ def main():
                             font=dict(size=10, color='black')
                         )
                     )
-                
+
                 node_trace = go.Scatter(
                     x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
                     marker=dict(
@@ -495,7 +477,7 @@ def main():
                     node_trace['x'] += tuple([x])
                     node_trace['y'] += tuple([y])
                     node_trace['text'] += tuple([node])
-                
+
                 fig = go.Figure(
                     data=edge_trace + [node_trace],
                     layout=go.Layout(
@@ -509,7 +491,7 @@ def main():
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
-        
+
             build_network_graph(selected)
 
 
