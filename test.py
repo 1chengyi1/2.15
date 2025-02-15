@@ -311,9 +311,12 @@ def main():
         st.title("控制面板")
         if st.button("🔄 重新计算风险值", help="当原始数据更新后点击此按钮"):
             with st.spinner("重新计算中..."):
-                risk_df, papers, projects = process_risk_data()
-                risk_df.to_excel('risk_scores.xlsx', index=False)
-            st.success("风险值更新完成！")
+                try:
+                    risk_df, papers, projects = process_risk_data()
+                    risk_df.to_excel('risk_scores.xlsx', index=False)
+                    st.success("风险值更新完成！")
+                except Exception as e:
+                    st.error(f"重新计算风险值时出现错误：{str(e)}")
 
         # 添加“返回首页”按钮
         if st.button("🏠 返回首页", help="点击返回首页"):
@@ -323,22 +326,25 @@ def main():
         if st.button("🤖 调用智谱清言评价", help="对查找的人员进行大模型评价"):
             search_term = st.session_state.get('search_term', '')
             if search_term:
-                # 模糊匹配
-                candidates = risk_df[risk_df['作者'].str.contains(search_term)]
-                if len(candidates) > 0:
-                    # 直接选择第一个匹配人员
-                    selected = candidates['作者'].iloc[0]
+                try:
+                    # 模糊匹配
+                    candidates = risk_df[risk_df['作者'].str.contains(search_term)]
+                    if len(candidates) > 0:
+                        # 直接选择第一个匹配人员
+                        selected = candidates['作者'].iloc[0]
 
-                    # 获取详细信息
-                    author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
-                    paper_records = papers[papers['姓名'] == selected]
-                    project_records = projects[projects['姓名'] == selected]
+                        # 获取详细信息
+                        author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
+                        paper_records = papers[papers['姓名'] == selected]
+                        project_records = projects[projects['姓名'] == selected]
 
-                    with st.spinner("正在调用智谱清言进行评价..."):
-                        evaluation = get_zhipu_evaluation(selected, paper_records, project_records)
-                    st.markdown(f"### 智谱清言评价\n{evaluation}")
-                else:
-                    st.warning("未找到匹配的研究人员，请先进行搜索。")
+                        with st.spinner("正在调用智谱清言进行评价..."):
+                            evaluation = get_zhipu_evaluation(selected, paper_records, project_records)
+                        st.markdown(f"### 智谱清言评价\n{evaluation}")
+                    else:
+                        st.warning("未找到匹配的研究人员，请先进行搜索。")
+                except NameError:
+                    st.warning("请先加载或重新计算风险值。")
             else:
                 st.warning("请先输入研究人员姓名进行搜索。")
 
@@ -347,10 +353,14 @@ def main():
         risk_df = pd.read_excel('risk_scores.xlsx')
         papers = pd.read_excel('data3.xlsx', sheet_name='论文')
         projects = pd.read_excel('data3.xlsx', sheet_name='项目')
-    except:
-        with st.spinner("首次运行需要初始化数据..."):
-            risk_df, papers, projects = process_risk_data()
-            risk_df.to_excel('risk_scores.xlsx', index=False)
+    except Exception as e:
+        try:
+            with st.spinner("首次运行需要初始化数据..."):
+                risk_df, papers, projects = process_risk_data()
+                risk_df.to_excel('risk_scores.xlsx', index=False)
+        except Exception as e:
+            st.error(f"数据加载和重新计算均失败：{str(e)}")
+            return
 
     # 主界面
     st.title("🔍 科研人员信用风险预警系统")
