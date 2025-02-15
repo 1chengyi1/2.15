@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import networkx as nx
@@ -14,10 +13,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import openai
+import requests
+import json
 
-# 设置 OpenAI API 密钥
-openai.api_key = st.secrets["deepseek"]["sk-405a37fab25149149e08b258f081e09b"]
+# 设置 DeepSeek API 相关信息
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEEPSEEK_API_KEY = st.secrets["deepseek"]["sk-405a37fab25149149e08b258f081e09b"]
 
 # ==========================
 # 数据预处理和风险值计算模块
@@ -258,18 +259,28 @@ def process_risk_data():
         '风险值': list(risk_scores.values())
     }), papers_df, projects_df
 
-# 调用大模型的函数
-def call_openai(prompt):
+# 调用 DeepSeek 大模型的函数
+def call_deepseek(prompt):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+    }
+    data = {
+        "model": "deepseek-chat",  # 根据实际情况修改模型名称
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        st.error(f"调用大模型时出现错误: {e}")
+        response = requests.post(DEEPSEEK_API_URL, headers=headers, data=json.dumps(data))
+        response.raise_for_status()
+        result = response.json()
+        return result["choices"][0]["message"]["content"]
+    except requests.RequestException as e:
+        st.error(f"调用 DeepSeek 大模型时出现网络错误: {e}")
+        return None
+    except (KeyError, json.JSONDecodeError):
+        st.error("解析 DeepSeek 大模型响应时出现错误")
         return None
 
 # ==========================
@@ -396,101 +407,102 @@ def main():
         # ======================
         with st.expander("🕸️ 展开合作关系网络", expanded=True):
             def build_network_graph(author):
-                G = nx.Graph()
-                G.add_node(author)
+                    G = nx.Graph()
+                    G.add_node(author)
 
-                # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
-                related = papers[
-                    (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
-                    (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
-                    (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
-                ]['姓名'].unique()
+                    # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
+                    related = papers[
+                        (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
+                        (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
+                        (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
+                    ]['姓名'].unique()
 
-                for person in related:
-                    if person != author:
-                        reason = ''
-                        if papers[(papers['姓名'] == author) & (papers['研究机构'] == papers[papers['姓名'] == person]['研究机构'].iloc[0])].shape[0] > 0:
-                            reason = '研究机构相同'
-                        elif papers[(papers['姓名'] == author) & (papers['研究方向'] == papers[papers['姓名'] == person]['研究方向'].iloc[0])].shape[0] > 0:
-                            reason = '研究方向相似'
-                        else:
-                            reason = '不端内容相关'
-                        G.add_node(person)
-                        G.add_edge(author, person, label=reason)
+                    for person in related:
+                        if person != author:
+                            reason = ''
+                            if papers[(papers['姓名'] == author) & (papers['研究机构'] == papers[papers['姓名'] == person]['研究机构'].iloc[0])].shape[0] > 0:
+                                reason = '研究机构相同'
+                            elif papers[(papers['姓名'] == author) & (papers['研究方向'] == papers[papers['姓名'] == person]['研究方向'].iloc[0])].shape[0] > 0:
+                                reason = '研究方向相似'
+                            else:
+                                reason = '不端内容相关'
+                            G.add_node(person)
+                            G.add_edge(author, person, label=reason)
 
-                # 使用 plotly 绘制网络图
-                pos = nx.spring_layout(G, k=0.5)  # 布局
-                edge_trace = []
-                edge_annotations = []  # 用于存储边的标注信息
-                for edge in G.edges(data=True):
-                    x0, y0 = pos[edge[0]]
-                    x1, y1 = pos[edge[1]]
-                    edge_trace.append(go.Scatter(
-                        x=[x0, x1, None], y=[y0, y1, None],
-                        line=dict(width=0.5, color='#888'),
-                        hoverinfo='text',
-                        mode='lines'
-                    ))
+                    # 使用 plotly 绘制网络图
+                    pos = nx.spring_layout(G, k=0.5)  # 布局
+                    edge_trace = []
+                    edge_annotations = []  # 用于存储边的标注信息
+                    for edge in G.edges(data=True):
+                        x0, y0 = pos[edge[0]]
+                        x1, y1 = pos[edge[1]]
+                        edge_trace.append(go.Scatter(
+                            x=[x0, x1, None], y=[y0, y1, None],
+                            line=dict(width=0.5, color='#888'),
+                            hoverinfo='text',
+                            mode='lines'
+                        ))
 
-                    # 计算边的中点位置，用于放置标注文字
-                    mid_x = (x0 + x1) / 2
-                    mid_y = (y0 + y1) / 2
-                    edge_annotations.append(
-                        dict(
-                            x=mid_x,
-                            y=mid_y,
-                            xref='x',
-                            yref='y',
-                            text=edge[2]['label'],  # 相连的原因作为标注文字
-                            showarrow=False,
-                            font=dict(size=10, color='black')
+                        # 计算边的中点位置，用于放置标注文字
+                        mid_x = (x0 + x1) / 2
+                        mid_y = (y0 + y1) / 2
+                        edge_annotations.append(
+                            dict(
+                                x=mid_x,
+                                y=mid_y,
+                                xref='x',
+                                yref='y',
+                                text=edge[2]['label'],  # 相连的原因作为标注文字
+                                showarrow=False,
+                                font=dict(size=10, color='black')
+                            )
+                        )
+
+                    node_trace = go.Scatter(
+                        x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
+                        marker=dict(
+                            showscale=True,
+                            colorscale='YlGnBu',
+                            size=10,
                         )
                     )
+                    for node in G.nodes():
+                        x, y = pos[node]
+                        node_trace['x'] += tuple([x])
+                        node_trace['y'] += tuple([y])
+                        node_trace['text'] += tuple([node])
 
-                node_trace = go.Scatter(
-                    x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
-                    marker=dict(
-                        showscale=True,
-                        colorscale='YlGnBu',
-                        size=10,
+                    fig = go.Figure(
+                        data=edge_trace + [node_trace],
+                        layout=go.Layout(
+                            title='<br>合作关系网络图',
+                            showlegend=False,
+                            hovermode='closest',
+                            margin=dict(b=20, l=5, r=5, t=40),
+                            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                            annotations=edge_annotations  # 添加边的标注信息
+                        )
                     )
-                )
-                for node in G.nodes():
-                    x, y = pos[node]
-                    node_trace['x'] += tuple([x])
-                    node_trace['y'] += tuple([y])
-                    node_trace['text'] += tuple([node])
+                    st.plotly_chart(fig, use_container_width=True)
 
-                fig = go.Figure(
-                    data=edge_trace + [node_trace],
-                    layout=go.Layout(
-                        title='<br>合作关系网络图',
-                        showlegend=False,
-                        hovermode='closest',
-                        margin=dict(b=20, l=5, r=5, t=40),
-                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        annotations=edge_annotations  # 添加边的标注信息
-                    )
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-            build_network_graph(selected)
+                build_network_graph(selected)
 
         # ======================
         # 调用大模型进行风险评估分析
         # ======================
         st.subheader("🤖 大模型风险评估分析")
         if st.button("获取大模型分析结果"):
-            with st.spinner("正在调用大模型进行分析..."):
+            with st.spinner("正在调用 DeepSeek 大模型进行分析..."):
                 # 构造提示词
                 paper_info = paper_records.to_csv(sep='\t', na_rep='nan') if not paper_records.empty else "无论文不端记录"
                 project_info = project_records.to_csv(sep='\t', na_rep='nan') if not project_records.empty else "无项目不端记录"
                 prompt = f"以下是科研人员 {selected} 的信息：信用风险值为 {author_risk:.2f}，风险等级为 {'高风险' if risk_level == 'high' else '低风险'}。论文不端记录如下：{paper_info}；项目不端记录如下：{project_info}。请分析该科研人员的风险情况，并给出相应的建议。"
 
-                result = call_openai(prompt)
+                result = call_deepseek(prompt)
                 if result:
                     st.write(result)
+
 
 if __name__ == "__main__":
     main()
