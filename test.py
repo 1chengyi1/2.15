@@ -265,7 +265,7 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
-            prompt=[{"role": "user", "content": input_text}]
+            messages=[{"role": "user", "content": input_text}]
         )
         if response['code'] == 200:
             return response['data']['choices'][0]['content']
