@@ -134,7 +134,7 @@ def process_risk_data():
         institution_map = papers.set_index('姓名')['研究机构'].to_dict()
         for a1 in institution_map:
             for a2 in institution_map:
-                if a1 != a2 and institution_map[a1] == institution_map[a2]:
+                if a1!= a2 and institution_map[a1] == institution_map[a2]:
                     G_authors.add_edge(a1, a2, weight=1, reason='研究机构相同')
 
         return G_authors
@@ -258,7 +258,6 @@ def process_risk_data():
         '风险值': list(risk_scores.values())
     }), papers_df, projects_df
 
-# 调用智谱大模型进行评价
 # 调用智谱大模型进行评价
 def get_zhipu_evaluation(selected, paper_records, project_records):
     # 构建输入文本
