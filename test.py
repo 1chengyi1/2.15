@@ -9,14 +9,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, average_precision_score
 import plotly.graph_objects as go
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
 import zhipuai
 
 # 设置智谱清言 API 密钥
-zhipuai.api_key = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"  # 请替换为你自己的 API 密钥
+zhipuai.api_key = "your_api_key"  # 请替换为你自己的 API 密钥
 
 # ==========================
 # 数据预处理和风险值计算模块
@@ -80,28 +76,28 @@ def process_risk_data():
     }
 
     # 读取原始数据
-    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+    papers_df = pd.read_excel('data3.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('data3.xlsx', sheet_name='项目')
 
     # ======================
     # 网络构建函数
     # ======================
     def build_networks(papers, projects):
-        # 作者-论文网络
+        # 作者 - 论文网络
         G_papers = nx.Graph()
         for _, row in papers.iterrows():
             authors = [row['姓名']]
             weight = misconduct_weights.get(row['不端原因'], 1)
             G_papers.add_edge(row['姓名'], row['不端内容'], weight=weight)
 
-        # 作者-项目网络
+        # 作者 - 项目网络
         G_projects = nx.Graph()
         for _, row in projects.iterrows():
             authors = [row['姓名']]
             weight = misconduct_weights.get(row['不端原因'], 1)
             G_projects.add_edge(row['姓名'], row['不端内容'], weight=weight)
 
-        # 作者-作者网络
+        # 作者 - 作者网络
         G_authors = nx.Graph()
 
         # 共同项目/论文连接
@@ -139,118 +135,14 @@ def process_risk_data():
         return G_authors
 
     # ======================
-    # Word2Vec（Skip-gram）模型定义
-    # ======================
-    class SkipGramModel(nn.Module):
-        def __init__(self, vocab_size, embedding_size):
-            super(SkipGramModel, self).__init__()
-            self.embeddings = nn.Embedding(vocab_size, embedding_size)
-            self.out = nn.Linear(embedding_size, vocab_size)
-
-        def forward(self, inputs):
-            embeds = self.embeddings(inputs)
-            outputs = self.out(embeds)
-            return outputs
-
-    # ======================
-    # 数据集定义
-    # ======================
-    class SkipGramDataset(Dataset):
-        def __init__(self, walks, node2id):
-            self.walks = walks
-            self.node2id = node2id
-
-        def __len__(self):
-            return len(self.walks)
-
-        def __getitem__(self, idx):
-            walk = self.walks[idx]
-            input_ids = [self.node2id[node] for node in walk[:-1]]
-            target_ids = [self.node2id[node] for node in walk[1:]]
-            return torch.tensor(input_ids), torch.tensor(target_ids)
-
-    # ======================
-    # DeepWalk实现
-    # ======================
-    def deepwalk(graph, walk_length=30, num_walks=200, embedding_size=128):
-        walks = []
-        nodes = list(graph.nodes())
-
-        for _ in range(num_walks):
-            random.shuffle(nodes)
-            for node in nodes:
-                walk = [str(node)]
-                current = node
-                for _ in range(walk_length - 1):
-                    neighbors = list(graph.neighbors(current))
-                    if neighbors:
-                        current = random.choice(neighbors)
-                        walk.append(str(current))
-                    else:
-                        break
-                walks.append(walk)
-
-        # 构建节点到ID的映射
-        node2id = {node: idx for idx, node in enumerate(set([node for walk in walks for node in walk]))}
-        id2node = {idx: node for node, idx in node2id.items()}
-
-        # 构建数据集
-        dataset = SkipGramDataset(walks, node2id)
-        dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-        # 模型初始化
-        model = SkipGramModel(len(node2id), embedding_size)
-        criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-        # 训练模型
-        for epoch in range(10):
-            for inputs, targets in dataloader:
-                optimizer.zero_grad()
-                outputs = model(inputs)
-                loss = criterion(outputs.view(-1, len(node2id)), targets.view(-1))
-                loss.backward()
-                optimizer.step()
-
-        # 获取嵌入
-        embeddings = {}
-        with torch.no_grad():
-            for node, idx in node2id.items():
-                embeddings[node] = model.embeddings(torch.tensor([idx])).squeeze().numpy()
-
-        return embeddings
-
-    # ======================
     # 执行计算流程
     # ======================
     with st.spinner('正在构建合作网络...'):
         G_authors = build_networks(papers_df, projects_df)
 
-    with st.spinner('正在训练DeepWalk模型...'):
-        embeddings = deepwalk(G_authors)
-
     with st.spinner('正在计算风险指标...'):
-        # 构建分类数据集
-        X, y = [], []
-        for edge in G_authors.edges():
-            X.append(np.concatenate([embeddings[edge[0]], embeddings[edge[1]]]))
-            y.append(1)
-
-        non_edges = list(nx.non_edges(G_authors))
-        non_edges = random.sample(non_edges, len(y))
-        for edge in non_edges:
-            X.append(np.concatenate([embeddings[edge[0]], embeddings[edge[1]]]))
-            y.append(0)
-
-        # 训练分类器
-        X = np.array(X)
-        y = np.array(y)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-        clf = RandomForestClassifier(n_estimators=100)
-        clf.fit(X_train, y_train)
-
-        # 计算节点风险值
-        risk_scores = {node: np.linalg.norm(emb) for node, emb in embeddings.items()}
+        # 计算节点风险值（使用度中心性）
+        risk_scores = nx.degree_centrality(G_authors)
 
     return pd.DataFrame({
         '作者': list(risk_scores.keys()),
@@ -267,26 +159,26 @@ def main():
         layout="wide"
     )
 
-    # 自定义CSS样式
+    # 自定义 CSS 样式
     st.markdown("""
     <style>
-.high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
-    @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
-.metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
-    table {
-        table - layout: fixed;
-    }
-    table td {
-        white - space: normal;
-    }
- .stDataFrame tbody tr {
-        display: block;
-        overflow - y: auto;
-        height: 200px;
-    }
- .stDataFrame tbody {
-        display: block;
-    }
+   .high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
+        @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
+   .metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
+        table {
+            table - layout: fixed;
+        }
+        table td {
+            white - space: normal;
+        }
+     .stDataFrame tbody tr {
+            display: block;
+            overflow - y: auto;
+            height: 200px;
+        }
+     .stDataFrame tbody {
+            display: block;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -306,8 +198,8 @@ def main():
     # 尝试加载现有数据
     try:
         risk_df = pd.read_excel('risk_scores.xlsx')
-        papers = pd.read_excel('实验数据.xlsx', sheet_name='论文')
-        projects = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+        papers = pd.read_excel('data3.xlsx', sheet_name='论文')
+        projects = pd.read_excel('data3.xlsx', sheet_name='项目')
     except:
         with st.spinner("首次运行需要初始化数据..."):
             risk_df, papers, projects = process_risk_data()
@@ -343,7 +235,7 @@ def main():
             st.markdown(
                 """
                 <style>
-                .scrollable-table {
+               .scrollable-table {
                     max-height: 300px;  /* 设置最大高度 */
                     overflow-y: auto;   /* 添加竖向滚动条 */
                     display: block;
@@ -368,13 +260,13 @@ def main():
 
         # 风险指标
         st.subheader("📊 风险分析")
-        risk_level = "high" if author_risk > 12 else "low"
+        risk_level = "high" if author_risk > 0.5 else "low"  # 这里简单设置阈值为 0.5，可根据实际情况调整
         cols = st.columns(4)
         cols[0].metric("信用风险值", f"{author_risk:.2f}",
                        delta_color="inverse" if risk_level == "high" else "normal")
         cols[1].metric("风险等级",
                        f"{'⚠️ 高风险' if risk_level == 'high' else '✅ 低风险'}",
-                       help="高风险阈值：12")
+                       help="高风险阈值：0.5")
 
         # ======================
         # 关系网络可视化
