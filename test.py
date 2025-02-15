@@ -306,8 +306,8 @@ def main():
     # 尝试加载现有数据
     try:
         risk_df = pd.read_excel('risk_scores.xlsx')
-        papers = pd.read_excel('data3.xlsx', sheet_name='论文')
-        projects = pd.read_excel('data3.xlsx', sheet_name='项目')
+        papers = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+        projects = pd.read_excel('实验数据.xlsx', sheet_name='项目')
     except:
         with st.spinner("首次运行需要初始化数据..."):
             risk_df, papers, projects = process_risk_data()
