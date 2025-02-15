@@ -259,9 +259,25 @@ def process_risk_data():
     }), papers_df, projects_df
 
 # 调用智谱大模型进行评价
-def get_zhipu_evaluation(selected, paper_records, project_records):
-    # 构建输入文本
-    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}"
+def get_zhipu_evaluation(selected, paper_records, project_records, risk_level):
+    # 构建输入文本，引导大模型从更多角度评价
+    input_text = f"请对科研人员 {selected} 进行详细评价，以下是详细信息：\n"
+    if not paper_records.empty:
+        first_author_papers = paper_records[paper_records['是否第一作者'] == '是']  # 假设数据中有 '是否第一作者' 列
+        input_text += f"其作为第一作者的论文不端记录为：{first_author_papers.to_csv(sep='\t', na_rep='nan')}\n"
+        other_papers = paper_records[paper_records['是否第一作者'] != '是']
+        if not other_papers.empty:
+            input_text += f"其他论文不端记录为：{other_papers.to_csv(sep='\t', na_rep='nan')}\n"
+    else:
+        input_text += "其暂无论文不端记录。\n"
+
+    if not project_records.empty:
+        input_text += f"其项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}\n"
+    else:
+        input_text += "其暂无项目不端记录。\n"
+
+    input_text += f"该科研人员的信用风险等级为 {'高风险' if risk_level == 'high' else '低风险'}。请结合国家科研诚信相关政策，分析其科研诚信情况。"
+
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -274,7 +290,7 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
             return f"请求失败，可能是网络问题或API调用异常"
     except Exception as e:
         return f"发生异常：{str(e)}"
-        
+
 # ==========================
 # 可视化界面模块
 # ==========================
