@@ -264,7 +264,7 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
     input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}"
     try:
         response = zhipuai.model_api.invoke(
-            model="chatglm_turbo",
+            model=""glm-4v-plus",
             prompt=[{"role": "user", "content": input_text}]
         )
         if response['code'] == 200:
