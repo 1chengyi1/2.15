@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import ZhipuAI
+from zhipuai import ZhipuAI
 import os
 
 # 设置智谱 API 密钥
