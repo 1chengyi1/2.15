@@ -6,7 +6,7 @@ import requests  # 用于调用API
 def generate_research_report(author_name, papers, projects):
     # 假设智谱清言大模型的API端点和API密钥
     API_URL = "https://api.zhiqingyan.com/generate_report"
-    API_KEY = "your_api_key_here"
+    API_KEY = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"
     
     # 准备请求数据
     data = {
