@@ -259,21 +259,10 @@ def process_risk_data():
     }), papers_df, projects_df
 
 # 调用智谱大模型进行评价
-def get_zhipu_evaluation(selected, paper_records, project_records, all_papers, all_projects):
-    # 筛选与查询作者相关度较高的数据
-    related_papers = all_papers[
-        (all_papers['研究机构'] == all_papers[all_papers['姓名'] == selected]['研究机构'].iloc[0]) |
-        (all_papers['研究方向'] == all_papers[all_papers['姓名'] == selected]['研究方向'].iloc[0]) |
-        (all_papers['不端内容'] == all_papers[all_papers['姓名'] == selected]['不端内容'].iloc[0])
-    ]
-    related_projects = all_projects[
-        (all_projects['研究机构'] == all_projects[all_projects['姓名'] == selected]['研究机构'].iloc[0]) |
-        (all_projects['研究方向'] == all_projects[all_projects['姓名'] == selected]['研究方向'].iloc[0]) |
-        (all_projects['不端内容'] == all_projects[all_projects['姓名'] == selected]['不端内容'].iloc[0])
-    ]
-
-    # 构建输入文本，让大模型根据相关数据找出相关人名
-    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}。请根据以下相关论文数据：{related_papers.to_csv(sep='\t', na_rep='nan')} 和相关项目数据：{related_projects.to_csv(sep='\t', na_rep='nan')}，分析并列举出与 {selected} 有关的具体人名。同时，请提及国家的一些科研诚信政策。"
+def get_zhipu_evaluation(selected, paper_records, project_records, related_people):
+    # 构建输入文本
+    related_people_str = ", ".join(related_people) if related_people else "无"
+    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}。同时，请提及国家的一些科研诚信政策，并列举出与 {selected} 有关的一些人（{related_people_str}）。"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -364,6 +353,14 @@ def main():
         paper_records = papers[papers['姓名'] == selected]
         project_records = projects[projects['姓名'] == selected]
 
+        # 查找与查询作者有关的人
+        related_people = papers[
+            (papers['研究机构'] == papers[papers['姓名'] == selected]['研究机构'].iloc[0]) |
+            (papers['研究方向'] == papers[papers['姓名'] == selected]['研究方向'].iloc[0]) |
+            (papers['不端内容'] == papers[papers['姓名'] == selected]['不端内容'].iloc[0])
+        ]['姓名'].unique()
+        related_people = [person for person in related_people if person != selected]
+
         # ======================
         # 信息展示
         # ======================
@@ -400,8 +397,7 @@ def main():
         st.subheader("📊 风险分析")
         risk_level = "high" if author_risk > 12 else "low"
         cols = st.columns(4)
-        cols[0].metric("信用风险值",
-                       f"{author_risk:.2f}",
+        cols[0].metric("信用风险值", f"{author_risk:.2f}",
                        delta_color="inverse" if risk_level == "high" else "normal")
         cols[1].metric("风险等级",
                        f"{'⚠️ 高风险' if risk_level == 'high' else '✅ 低风险'}",
@@ -410,7 +406,8 @@ def main():
         # 新增：调用智谱大模型的按钮
         if st.button(f"📝 获取 {selected} 的大模型评价"):
             with st.spinner("正在调用智谱大模型进行评价..."):
-                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, papers, projects)
+                # 修复参数传递问题，添加 risk_level 参数
+                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, risk_level)
             st.subheader("📝 智谱大模型评价")
             st.write(evaluation)
 
