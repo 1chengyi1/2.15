@@ -1,6 +1,4 @@
-为了在现有代码中加入调用大模型的功能，我们可以使用 OpenAI 的 GPT 模型作为示例。以下是修改后的代码：
 
-```python
 import streamlit as st
 import pandas as pd
 import networkx as nx
@@ -19,7 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 import openai
 
 # 设置 OpenAI API 密钥
-openai.api_key = st.secrets["openai"]["api_key"]
+openai.api_key = st.secrets["openai"]["sk-405a37fab25149149e08b258f081e09b"]
 
 # ==========================
 # 数据预处理和风险值计算模块
