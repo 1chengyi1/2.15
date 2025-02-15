@@ -263,7 +263,7 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
     # 构建输入文本
     input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}"
     try:
-        response = client.chat.asyncCompletions.create(
+        response = client.chat.completions.create(
             model="glm-4v-plus",
             prompt=[{"role": "user", "content": input_text}]
         )
