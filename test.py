@@ -265,14 +265,12 @@ def process_risk_data():
 def generate_resume_and_evaluation(author, paper_records, project_records, risk_value):
     prompt = f"请为科研人员 {author} 生成一份简历和评价。该科研人员的论文不端记录如下：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录如下：{project_records.to_csv(sep='\t', na_rep='nan')}，信用风险值为 {risk_value}。"
     try:
-        response = zhipuai.model_api.invoke(
+        # 修改调用方式
+        response = zhipuai.chat.completions.create(
             model="chatglm_turbo",
-            prompt=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}]
         )
-        if response['code'] == 200:
-            return response['data']['choices'][0]['content']
-        else:
-            return f"请求失败，错误代码：{response['code']}，错误信息：{response['msg']}"
+        return response.choices[0].message.content
     except Exception as e:
         return f"请求发生异常：{str(e)}"
 
@@ -373,11 +371,11 @@ def main():
             # 保存选中的科研人员信息到 session_state
             st.session_state.selected_author = selected
             st.session_state.author_risk = author_risk
-            st.session_state.paper_records = paper_records
             st.session_state.project_records = project_records
 
             # ======================
             # 信息展示
+            # ======================
             st.subheader("📄 论文记录")
             if not paper_records.empty:
                 # 添加竖向滚动条
@@ -385,8 +383,8 @@ def main():
                     """
                     <style>
                     .scrollable-table {
-                        max-height: 300px;  /* 设置最大高度 */
-                        overflow-y: auto;   /* 添加竖向滚动条 */
+                        max-height: 300px;
+                        overflow-y: auto;
                         display: block;
                     }
                     </style>
@@ -470,7 +468,7 @@ def main():
                                 y=mid_y,
                                 xref='x',
                                 yref='y',
-                                text=edge[2]['label'],  # 相连的原因作为标注文字
+                                text=edge[2]['label'],
                                 showarrow=False,
                                 font=dict(size=10, color='black')
                             )
@@ -499,7 +497,7 @@ def main():
                             margin=dict(b=20, l=5, r=5, t=40),
                             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                            annotations=edge_annotations  # 添加边的标注信息
+                            annotations=edge_annotations
                         )
                     )
                     st.plotly_chart(fig, use_container_width=True)
