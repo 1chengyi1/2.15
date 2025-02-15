@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 import requests
 
 # 智谱清言 API 相关配置
-Zhipu_API_KEY = "your_api_key"  # 替换为你的智谱 API 密钥
+Zhipu_API_KEY = "89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz"  # 替换为你的智谱 API 密钥
 Zhipu_API_URL = "https://open.bigmodel.cn/api/paas/v3/model-api/chatglm_lite/invoke"
 
 def zhipu_chat(prompt):
