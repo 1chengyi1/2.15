@@ -15,9 +15,6 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from zhipuai import ZhipuAI
 import os
-import requests
-from bs4 import BeautifulSoup
-import re
 
 # 设置智谱 API 密钥
 client = ZhipuAI(api_key="89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz")
@@ -261,54 +258,23 @@ def process_risk_data():
         '风险值': list(risk_scores.values())
     }), papers_df, projects_df
 
-# 联网搜索信息
-def search_online_info(author, institution):
-    search_terms = [
-        f"{author} {institution} 科研成果",
-        f"{author} {institution} 科研论文",
-        f"{author} {institution} 科研奖项",
-        f"{author} {institution} 科研诚信情况",
-        f"{author} {institution} 学术活动"
-    ]
-    all_info = ""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    for term in search_terms:
-        search_url = f"https://www.baidu.com/s?wd={term}"
-        try:
-            response = requests.get(search_url, headers=headers)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'html.parser')
-            results = soup.find_all('div', class_='result c-container')
-            for result in results:
-                info = result.get_text()
-                # 简单过滤掉广告等无关信息
-                if "广告" not in info:
-                    all_info += info + " "
-        except requests.RequestException as e:
-            all_info += f"网络请求出错：{str(e)} "
-    return all_info
-
 # 调用智谱大模型进行评价
-def get_zhipu_evaluation(selected, institution):
-    # 联网搜索信息
-    online_info = search_online_info(selected, institution)
-    # 清洗搜索信息
-    online_info = re.sub(r'[^\w\s]', '', online_info)
+def get_zhipu_evaluation(selected, paper_records, project_records, related_people):
     # 构建输入文本
-    input_text = f"请对 {institution} 的 {selected} 进行简介，然后依据国家科研诚信政策对其科研行为进行评价。搜索到的相关信息：{online_info}"
+    related_people_str = ", ".join(related_people) if related_people else "无"
+    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}。同时，请提及国家的一些科研诚信政策，并列举出与 {selected} 有关的一些人（{related_people_str}）。"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
             messages=[{"role": "user", "content": input_text}]
         )
-        if response and response.choices:
+        # 检查响应是否成功
+        if response:
             return response.choices[0].message.content
         else:
-            return "未从智谱大模型获取到有效回复，请检查网络或 API 配置。"
+            return f"请求失败，可能是网络问题或API调用异常"
     except Exception as e:
-        return f"调用智谱大模型时发生异常：{str(e)}"
+        return f"发生异常：{str(e)}"
 
 # ==========================
 # 可视化界面模块
@@ -323,21 +289,21 @@ def main():
     # 自定义CSS样式
     st.markdown("""
     <style>
-    .high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
+.high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
     @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
-    .metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
+.metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
     table {
         table - layout: fixed;
     }
     table td {
         white - space: normal;
     }
-    .stDataFrame tbody tr {
+ .stDataFrame tbody tr {
         display: block;
         overflow - y: auto;
         height: 200px;
     }
-    .stDataFrame tbody {
+ .stDataFrame tbody {
         display: block;
     }
     </style>
@@ -386,12 +352,6 @@ def main():
         author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
         paper_records = papers[papers['姓名'] == selected]
         project_records = projects[projects['姓名'] == selected]
-
-        # 获取研究机构信息
-        if not paper_records.empty:
-            institution = paper_records['研究机构'].iloc[0]
-        else:
-            institution = "未找到研究机构信息"
 
         # 查找与查询作者有关的人
         related_people = papers[
@@ -446,7 +406,8 @@ def main():
         # 新增：调用智谱大模型的按钮
         if st.button(f"📝 获取 {selected} 的大模型评价"):
             with st.spinner("正在调用智谱大模型进行评价..."):
-                evaluation = get_zhipu_evaluation(selected, institution)
+                # 修复参数传递问题，添加 risk_level 参数
+                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, risk_level)
             st.subheader("📝 智谱大模型评价")
             st.write(evaluation)
 
