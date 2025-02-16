@@ -261,8 +261,8 @@ def process_risk_data():
     }), papers_df, projects_df
 
 # 联网搜索信息
-def search_online_info(author):
-    search_terms = [f"{author} 科研成果", f"{author} 科研诚信", f"{author} 合作科研人员"]
+def search_online_info(author, institution):
+    search_terms = [f"{author} {institution} 科研成果", f"{author} {institution} 科研诚信", f"{author} {institution} 合作科研人员"]
     all_info = ""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
@@ -281,11 +281,11 @@ def search_online_info(author):
     return all_info
 
 # 调用智谱大模型进行评价
-def get_zhipu_evaluation(selected):
+def get_zhipu_evaluation(selected, institution):
     # 联网搜索信息
-    online_info = search_online_info(selected)
+    online_info = search_online_info(selected, institution)
     # 构建输入文本
-    input_text = f"请根据互联网信息对科研人员 {selected} 进行全面的介绍，包括他的科研成果、科研诚信情况等，并介绍一下和他合作很频繁的其他科研人员。同时提及国家的一些科研诚信政策。搜索到的相关信息：{online_info}"
+    input_text = f"请根据互联网信息对科研人员 {selected} （所属研究机构：{institution}）进行简介，然后根据国家科研诚信政策对他进行评价，并列举 5 个与他合作频繁的其他科研人员。搜索到的相关信息：{online_info}"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -376,6 +376,12 @@ def main():
         paper_records = papers[papers['姓名'] == selected]
         project_records = projects[projects['姓名'] == selected]
 
+        # 获取研究机构信息
+        if not paper_records.empty:
+            institution = paper_records['研究机构'].iloc[0]
+        else:
+            institution = "未找到研究机构信息"
+
         # 查找与查询作者有关的人
         related_people = papers[
             (papers['研究机构'] == papers[papers['姓名'] == selected]['研究机构'].iloc[0]) |
@@ -383,7 +389,8 @@ def main():
             (papers['不端内容'] == papers[papers['姓名'] == selected]['不端内容'].iloc[0])
         ]['姓名'].unique()
         related_people = [person for person in related_people if person != selected]
-                # ======================
+
+        # ======================
         # 信息展示
         # ======================
         st.subheader("📄 论文记录")
@@ -428,7 +435,7 @@ def main():
         # 新增：调用智谱大模型的按钮
         if st.button(f"📝 获取 {selected} 的大模型评价"):
             with st.spinner("正在调用智谱大模型进行评价..."):
-                evaluation = get_zhipu_evaluation(selected)
+                evaluation = get_zhipu_evaluation(selected, institution)
             st.subheader("📝 智谱大模型评价")
             st.write(evaluation)
 
