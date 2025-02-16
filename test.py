@@ -20,12 +20,238 @@ client = ZhipuAI(api_key="89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz")
 def process_risk_data():
     # 不端原因严重性权重
     misconduct_weights = {
-        # ...（保持原有的权重字典不变）
+        '伪造、篡改图片': 6,
+        '篡改图片': 3,
+        '篡改数据': 3,
+        '篡改数据、图片': 6,
+        '编造研究过程': 4,
+        '编造研究过程、不当署名': 7,
+        '篡改数据、不当署名': 6,
+        '伪造通讯作者邮箱': 2,
+        '实验流程不规范': 2,
+        '数据审核不严': 2,
+        '署名不当、实验流程不规范': 5,
+        '篡改数据、代写代投、伪造通讯作者邮箱、不当署名': 13,
+        '篡改数据、伪造通讯作者邮箱、不当署名': 8,
+        '第三方代写、伪造通讯作者邮箱': 7,
+        '第三方代写代投、伪造数据': 8,
+        '一稿多投': 2,
+        '第三方代写代投、伪造数据、一稿多投': 10,
+        '篡改数据、剽窃': 8,
+        '伪造图片': 3,
+        '伪造图片、不当署名': 6,
+        '委托实验、不当署名': 6,
+        '伪造数据': 3,
+        '伪造数据、篡改图片': 6,
+        '伪造数据、不当署名、伪造通讯作者邮箱等': 8,
+        '伪造数据、一图多用、伪造图片、代投问题': 14,
+        '伪造数据、署名不当': 6,
+        '抄袭剽窃他人项目申请书内容': 6,
+        '伪造通讯作者邮箱、篡改数据和图片': 8,
+        '篡改数据、不当署名': 6,
+        '抄袭他人基金项目申请书': 6,
+        '结题报告中存在虚假信息': 5,
+        '抄袭剽窃': 5,
+        '造假、抄袭': 5,
+        '第三方代写代投': 5,
+        '署名不当': 3,
+        '第三方代写代投、署名不当': 8,
+        '抄袭剽窃、伪造数据': 8,
+        '买卖图片数据': 3,
+        '买卖数据': 3,
+        '买卖论文': 5,
+        '买卖论文、不当署名': 8,
+        '买卖论文数据': 8,
+        '买卖论文数据、不当署名': 11,
+        '买卖图片数据、不当署名': 6,
+        '图片不当使用、伪造数据': 6,
+        '图片不当使用、数据造假、未经同意使用他人署名': 9,
+        '图片不当使用、数据造假、未经同意使用他人署名、编造研究过程': 13,
+        '图片造假、不当署名': 9,
+        '图片造假、不当署名、伪造通讯作者邮箱等': 11,
+        '买卖数据、不当署名': 6,
+        '伪造论文、不当署名': 6,
+        '其他轻微不端行为': 1
     }
 
     # 读取数据并构建网络（保持原有网络构建逻辑不变）
-    # ...
-    return risk_df, papers_df, projects_df
+    # 读取原始数据
+    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+
+    # ======================
+    # 网络构建函数
+    # ======================
+    def build_networks(papers, projects):
+        # 作者-论文网络
+        G_papers = nx.Graph()
+        for _, row in papers.iterrows():
+            authors = [row['姓名']]
+            weight = misconduct_weights.get(row['不端原因'], 1)
+            G_papers.add_edge(row['姓名'], row['不端内容'], weight=weight)
+
+        # 作者-项目网络
+        G_projects = nx.Graph()
+        for _, row in projects.iterrows():
+            authors = [row['姓名']]
+            weight = misconduct_weights.get(row['不端原因'], 1)
+            G_projects.add_edge(row['姓名'], row['不端内容'], weight=weight)
+
+        # 作者-作者网络
+        G_authors = nx.Graph()
+
+        # 共同项目/论文连接
+        for df in [papers, projects]:
+            for _, row in df.iterrows():
+                authors = [row['姓名']]
+                weight = misconduct_weights.get(row['不端原因'], 1)
+                for i in range(len(authors)):
+                    for j in range(i + 1, len(authors)):
+                        if G_authors.has_edge(authors[i], authors[j]):
+                            G_authors[authors[i]][authors[j]]['weight'] += weight
+                        else:
+                            G_authors.add_edge(authors[i], authors[j], weight=weight)
+
+        # 研究方向相似性连接
+        research_areas = papers.groupby('姓名')['研究方向'].apply(lambda x: ' '.join(x)).reset_index()
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform(research_areas['研究方向'])
+        similarity_matrix = cosine_similarity(tfidf_matrix)
+
+        for i in range(len(research_areas)):
+            for j in range(i + 1, len(research_areas)):
+                if similarity_matrix[i, j] > 0.7:
+                    a1 = research_areas.iloc[i]['姓名']
+                    a2 = research_areas.iloc[j]['姓名']
+                    G_authors.add_edge(a1, a2, weight=similarity_matrix[i, j], reason='研究方向相似')
+
+        # 共同机构连接
+        institution_map = papers.set_index('姓名')['研究机构'].to_dict()
+        for a1 in institution_map:
+            for a2 in institution_map:
+                if a1 != a2 and institution_map[a1] == institution_map[a2]:
+                    G_authors.add_edge(a1, a2, weight=1, reason='研究机构相同')
+
+        return G_authors
+
+    # ======================
+    # Word2Vec（Skip-gram）模型定义
+    # ======================
+    class SkipGramModel(nn.Module):
+        def __init__(self, vocab_size, embedding_size):
+            super(SkipGramModel, self).__init__()
+            self.embeddings = nn.Embedding(vocab_size, embedding_size)
+            self.out = nn.Linear(embedding_size, vocab_size)
+
+        def forward(self, inputs):
+            embeds = self.embeddings(inputs)
+            outputs = self.out(embeds)
+            return outputs
+
+    # ======================
+    # 数据集定义
+    # ======================
+    class SkipGramDataset(Dataset):
+        def __init__(self, walks, node2id):
+            self.walks = walks
+            self.node2id = node2id
+
+        def __len__(self):
+            return len(self.walks)
+
+        def __getitem__(self, idx):
+            walk = self.walks[idx]
+            input_ids = [self.node2id[node] for node in walk[:-1]]
+            target_ids = [self.node2id[node] for node in walk[1:]]
+            return torch.tensor(input_ids), torch.tensor(target_ids)
+
+    # ======================
+    # DeepWalk实现
+    # ======================
+    def deepwalk(graph, walk_length=30, num_walks=200, embedding_size=128):
+        walks = []
+        nodes = list(graph.nodes())
+
+        for _ in range(num_walks):
+            random.shuffle(nodes)
+            for node in nodes:
+                walk = [str(node)]
+                current = node
+                for _ in range(walk_length - 1):
+                    neighbors = list(graph.neighbors(current))
+                    if neighbors:
+                        current = random.choice(neighbors)
+                        walk.append(str(current))
+                    else:
+                        break
+                walks.append(walk)
+
+        # 构建节点到ID的映射
+        node2id = {node: idx for idx, node in enumerate(set([node for walk in walks for node in walk]))}
+        id2node = {idx: node for node, idx in node2id.items()}
+
+        # 构建数据集
+        dataset = SkipGramDataset(walks, node2id)
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+        # 模型初始化
+        model = SkipGramModel(len(node2id), embedding_size)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+        # 训练模型
+        for epoch in range(10):
+            for inputs, targets in dataloader:
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs.view(-1, len(node2id)), targets.view(-1))
+                loss.backward()
+                optimizer.step()
+
+        # 获取嵌入
+        embeddings = {}
+        with torch.no_grad():
+            for node, idx in node2id.items():
+                embeddings[node] = model.embeddings(torch.tensor([idx])).squeeze().numpy()
+
+        return embeddings
+
+    # ======================
+    # 执行计算流程
+    # ======================
+    with st.spinner('正在构建合作网络...'):
+        G_authors = build_networks(papers_df, projects_df)
+
+    with st.spinner('正在训练DeepWalk模型...'):
+        embeddings = deepwalk(G_authors)
+
+    with st.spinner('正在计算风险指标...'):
+        # 构建分类数据集
+        X, y = [], []
+        for edge in G_authors.edges():
+            X.append(np.concatenate([embeddings[edge[0]], embeddings[edge[1]]]))
+            y.append(1)
+
+        non_edges = list(nx.non_edges(G_authors))
+        non_edges = random.sample(non_edges, len(y))
+        for edge in non_edges:
+            X.append(np.concatenate([embeddings[edge[0]], embeddings[edge[1]]]))
+            y.append(0)
+
+        # 训练分类器
+        X = np.array(X)
+        y = np.array(y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+        clf = RandomForestClassifier(n_estimators=100)
+        clf.fit(X_train, y_train)
+
+        # 计算节点风险值
+        risk_scores = {node: np.linalg.norm(emb) for node, emb in embeddings.items()}
+
+    return pd.DataFrame({
+        '作者': list(risk_scores.keys()),
+        '风险值': list(risk_scores.values())
+    }), papers_df, projects_df
 
 # ==========================
 # 智谱大模型交互模块
