@@ -262,7 +262,7 @@ def process_risk_data():
 def get_zhipu_evaluation(selected, paper_records, project_records, related_people):
     # 构建输入文本
     related_people_str = ", ".join(related_people) if related_people else "无"
-    input_text = f"请对科研人员 {selected} 进行评价，其论文不端记录为：{paper_records.to_csv(sep='\t', na_rep='nan')}，项目不端记录为：{project_records.to_csv(sep='\t', na_rep='nan')}。同时，请提及国家的一些科研诚信政策，并列举出与 {selected} 有关的一些人（{related_people_str}）。"
+    input_text = f"请对科研人员 {selected} 进行评价，提供其简介，结合国家的科研诚信政策对其论文不端记录（{paper_records.to_csv(sep='\t', na_rep='nan')}）和项目不端记录（{project_records.to_csv(sep='\t', na_rep='nan')}）进行分析。同时，请联网搜索与 {selected} 频繁一起工作的其他科研人员。此外，提及与 {selected} 有关的一些人（{related_people_str}）。"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
