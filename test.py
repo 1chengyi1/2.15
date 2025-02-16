@@ -344,9 +344,29 @@ def main():
     }
     </style>
     """, unsafe_allow_html=True)
+    
+    # 侧边栏控制面板
+    with st.sidebar:
+        st.title("控制面板")
+        if st.button("🔄 重新计算风险值", help="当原始数据更新后点击此按钮"):
+            with st.spinner("重新计算中..."):
+                risk_df, papers, projects = process_risk_data()
+                risk_df.to_excel('risk_scores.xlsx', index=False)
+            st.success("风险值更新完成！")
 
-    # 侧边栏（保持原有数据加载逻辑不变）
-    # ...
+        # 添加“返回首页”按钮
+        if st.button("🏠 返回首页", help="点击返回首页"):
+            st.markdown("[点击这里返回首页](https://chengyi10.wordpress.com/)", unsafe_allow_html=True)
+
+    # 尝试加载现有数据
+    try:
+        risk_df = pd.read_excel('risk_scores.xlsx')
+        papers = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+        projects = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+    except:
+        with st.spinner("首次运行需要初始化数据..."):
+            risk_df, papers, projects = process_risk_data()
+            risk_df.to_excel('risk_scores.xlsx', index=False)
 
     # 主界面
     st.title("🔍 科研人员深度分析系统")
@@ -355,7 +375,69 @@ def main():
     search_term = st.text_input("输入研究人员姓名：", placeholder="支持中英文姓名搜索...")
     
     if search_term:
-        # ...（保持原有数据匹配逻辑）
+        # 模糊匹配
+        candidates = risk_df[risk_df['作者'].str.contains(search_term)]
+        if len(candidates) == 0:
+            st.warning("未找到匹配的研究人员")
+            return
+
+        # 直接选择第一个匹配人员
+        selected = candidates['作者'].iloc[0]
+
+        # 获取详细信息
+        author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
+        paper_records = papers[papers['姓名'] == selected]
+        project_records = projects[projects['姓名'] == selected]
+
+        # 查找与查询作者有关的人
+        related_people = papers[
+            (papers['研究机构'] == papers[papers['姓名'] == selected]['研究机构'].iloc[0]) |
+            (papers['研究方向'] == papers[papers['姓名'] == selected]['研究方向'].iloc[0]) |
+            (papers['不端内容'] == papers[papers['姓名'] == selected]['不端内容'].iloc[0])
+        ]['姓名'].unique()
+        related_people = [person for person in related_people if person != selected]
+
+        # ======================
+        # 信息展示
+        # ======================
+        st.subheader("📄 论文记录")
+        if not paper_records.empty:
+            # 添加竖向滚动条
+            st.markdown(
+                """
+                <style>
+                .scrollable-table {
+                    max-height: 300px;  /* 设置最大高度 */
+                    overflow-y: auto;   /* 添加竖向滚动条 */
+                    display: block;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+            # 将 DataFrame 转换为 HTML，并添加滚动条样式
+            st.markdown(
+                f'<div class="scrollable-table">{paper_records.to_html(escape=False, index=False)}</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.info("暂无论文不端记录")
+
+        st.subheader("📋 项目记录")
+        if not project_records.empty:
+            st.markdown(project_records.to_html(escape=False), unsafe_allow_html=True)
+        else:
+            st.info("暂无项目不端记录")
+
+        # 风险指标
+        st.subheader("📊 风险分析")
+        risk_level = "high" if author_risk > 12 else "low"
+        cols = st.columns(4)
+        cols[0].metric("信用风险值", f"{author_risk:.2f}",
+                       delta_color="inverse" if risk_level == "high" else "normal")
+        cols[1].metric("风险等级",
+                       f"{'⚠️ 高风险' if risk_level == 'high' else '✅ 低风险'}",
+                       help="高风险阈值：12")
         
         # ======================
         # 智能分析报告生成
@@ -406,7 +488,92 @@ def main():
                 except Exception as e:
                     st.error(f"报告生成失败：{str(e)}")
 
-        # ...（保持原有的网络可视化等组件）
+        # ======================
+        # 关系网络可视化
+        # ======================
+        with st.expander("🕸️ 展开合作关系网络", expanded=True):
+            def build_network_graph(author):
+                G = nx.Graph()
+                G.add_node(author)
+
+                # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
+                related = papers[
+                    (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
+                    (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
+                    (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
+                ]['姓名'].unique()
+
+                for person in related:
+                    if person != author:
+                        reason = ''
+                        if papers[(papers['姓名'] == author) & (papers['研究机构'] == papers[papers['姓名'] == person]['研究机构'].iloc[0])].shape[0] > 0:
+                            reason = '研究机构相同'
+                        elif papers[(papers['姓名'] == author) & (papers['研究方向'] == papers[papers['姓名'] == person]['研究方向'].iloc[0])].shape[0] > 0:
+                            reason = '研究方向相似'
+                        else:
+                            reason = '不端内容相关'
+                        G.add_node(person)
+                        G.add_edge(author, person, label=reason)
+
+                # 使用 plotly 绘制网络图
+                pos = nx.spring_layout(G, k=0.5)  # 布局
+                edge_trace = []
+                edge_annotations = []  # 用于存储边的标注信息
+                for edge in G.edges(data=True):
+                    x0, y0 = pos[edge[0]]
+                    x1, y1 = pos[edge[1]]
+                    edge_trace.append(go.Scatter(
+                        x=[x0, x1, None], y=[y0, y1, None],
+                        line=dict(width=0.5, color='#888'),
+                        hoverinfo='text',
+                        mode='lines'
+                    ))
+
+                    # 计算边的中点位置，用于放置标注文字
+                    mid_x = (x0 + x1) / 2
+                    mid_y = (y0 + y1) / 2
+                    edge_annotations.append(
+                        dict(
+                            x=mid_x,
+                            y=mid_y,
+                            xref='x',
+                            yref='y',
+                            text=edge[2]['label'],  # 相连的原因作为标注文字
+                            showarrow=False,
+                            font=dict(size=10, color='black')
+                        )
+                    )
+
+                node_trace = go.Scatter(
+                    x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
+                    marker=dict(
+                        showscale=True,
+                        colorscale='YlGnBu',
+                        size=10,
+                    )
+                )
+                for node in G.nodes():
+                    x, y = pos[node]
+                    node_trace['x'] += tuple([x])
+                    node_trace['y'] += tuple([y])
+                    node_trace['text'] += tuple([node])
+
+                fig = go.Figure(
+                    data=edge_trace + [node_trace],
+                    layout=go.Layout(
+                        title='<br>合作关系网络图',
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=20, l=5, r=5, t=40),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        annotations=edge_annotations  # 添加边的标注信息
+                    )
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            build_network_graph(selected)
+
 
 if __name__ == "__main__":
     main()
