@@ -13,3 +13,4 @@ torch
 matplotlib
 zhipuai
 ZhipuAI
+bs4
