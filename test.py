@@ -9,6 +9,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from zhipuai import ZhipuAI
 import os
+import torch
+from torch import nn
+from torch.utils.data import Dataset, DataLoader
+import torch.optim as optim
+import plotly.graph_objects as go
 
 # 设置智谱 API 密钥
 client = ZhipuAI(api_key="89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz")
@@ -74,10 +79,13 @@ def process_risk_data():
         '其他轻微不端行为': 1
     }
 
-    # 读取数据并构建网络（保持原有网络构建逻辑不变）
-    # 读取原始数据
-    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+    try:
+        # 读取原始数据
+        papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+        projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+    except FileNotFoundError:
+        st.error("未找到实验数据文件，请检查文件路径和文件名。")
+        return None, None, None
 
     # ======================
     # 网络构建函数
@@ -303,13 +311,96 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
             model="glm-4v-plus",
             messages=[{
                 "role": "user",
-                "content": prompt_template,
-                "temperature": 0.3
-            }]
+                "content": prompt_template
+            }],
+            temperature=0.3
         )
         return response.choices[0].message.content
     except Exception as e:
         return f"## 服务异常\n{str(e)}"
+
+# ======================
+# 关系网络可视化函数
+# ======================
+def build_network_graph(author, papers):
+    G = nx.Graph()
+    G.add_node(author)
+
+    # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
+    related = papers[
+        (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
+        (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
+        (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
+    ]['姓名'].unique()
+
+    for person in related:
+        if person != author:
+            reason = ''
+            if papers[(papers['姓名'] == author) & (papers['研究机构'] == papers[papers['姓名'] == person]['研究机构'].iloc[0])].shape[0] > 0:
+                reason = '研究机构相同'
+            elif papers[(papers['姓名'] == author) & (papers['研究方向'] == papers[papers['姓名'] == person]['研究方向'].iloc[0])].shape[0] > 0:
+                reason = '研究方向相似'
+            else:
+                reason = '不端内容相关'
+            G.add_node(person)
+            G.add_edge(author, person, label=reason)
+
+    # 使用 plotly 绘制网络图
+    pos = nx.spring_layout(G, k=0.5)  # 布局
+    edge_trace = []
+    edge_annotations = []  # 用于存储边的标注信息
+    for edge in G.edges(data=True):
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_trace.append(go.Scatter(
+            x=[x0, x1, None], y=[y0, y1, None],
+            line=dict(width=0.5, color='#888'),
+            hoverinfo='text',
+            mode='lines'
+        ))
+
+        # 计算边的中点位置，用于放置标注文字
+                mid_x = (x0 + x1) / 2
+        mid_y = (y0 + y1) / 2
+        edge_annotations.append(
+            dict(
+                x=mid_x,
+                y=mid_y,
+                xref='x',
+                yref='y',
+                text=edge[2]['label'],  # 相连的原因作为标注文字
+                showarrow=False,
+                font=dict(size=10, color='black')
+            )
+        )
+
+    node_trace = go.Scatter(
+        x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
+        marker=dict(
+            showscale=True,
+            colorscale='YlGnBu',
+            size=10,
+        )
+    )
+    for node in G.nodes():
+        x, y = pos[node]
+        node_trace['x'] += tuple([x])
+        node_trace['y'] += tuple([y])
+        node_trace['text'] += tuple([node])
+
+    fig = go.Figure(
+        data=edge_trace + [node_trace],
+        layout=go.Layout(
+            title='<br>合作关系网络图',
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=20, l=5, r=5, t=40),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            annotations=edge_annotations  # 添加边的标注信息
+        )
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 # ==========================
 # 可视化界面模块
@@ -351,8 +442,9 @@ def main():
         if st.button("🔄 重新计算风险值", help="当原始数据更新后点击此按钮"):
             with st.spinner("重新计算中..."):
                 risk_df, papers, projects = process_risk_data()
-                risk_df.to_excel('risk_scores.xlsx', index=False)
-            st.success("风险值更新完成！")
+                if risk_df is not None:
+                    risk_df.to_excel('risk_scores.xlsx', index=False)
+                    st.success("风险值更新完成！")
 
         # 添加“返回首页”按钮
         if st.button("🏠 返回首页", help="点击返回首页"):
@@ -363,10 +455,13 @@ def main():
         risk_df = pd.read_excel('risk_scores.xlsx')
         papers = pd.read_excel('实验数据.xlsx', sheet_name='论文')
         projects = pd.read_excel('实验数据.xlsx', sheet_name='项目')
-    except:
+    except FileNotFoundError:
         with st.spinner("首次运行需要初始化数据..."):
             risk_df, papers, projects = process_risk_data()
-            risk_df.to_excel('risk_scores.xlsx', index=False)
+            if risk_df is not None:
+                risk_df.to_excel('risk_scores.xlsx', index=False)
+        if risk_df is None:
+            return
 
     # 主界面
     st.title("🔍 科研人员深度分析系统")
@@ -492,88 +587,9 @@ def main():
         # 关系网络可视化
         # ======================
         with st.expander("🕸️ 展开合作关系网络", expanded=True):
-            def build_network_graph(author):
-                G = nx.Graph()
-                G.add_node(author)
-
-                # 查找与查询作者有共同研究机构、研究方向或不端内容的作者
-                related = papers[
-                    (papers['研究机构'] == papers[papers['姓名'] == author]['研究机构'].iloc[0]) |
-                    (papers['研究方向'] == papers[papers['姓名'] == author]['研究方向'].iloc[0]) |
-                    (papers['不端内容'] == papers[papers['姓名'] == author]['不端内容'].iloc[0])
-                ]['姓名'].unique()
-
-                for person in related:
-                    if person != author:
-                        reason = ''
-                        if papers[(papers['姓名'] == author) & (papers['研究机构'] == papers[papers['姓名'] == person]['研究机构'].iloc[0])].shape[0] > 0:
-                            reason = '研究机构相同'
-                        elif papers[(papers['姓名'] == author) & (papers['研究方向'] == papers[papers['姓名'] == person]['研究方向'].iloc[0])].shape[0] > 0:
-                            reason = '研究方向相似'
-                        else:
-                            reason = '不端内容相关'
-                        G.add_node(person)
-                        G.add_edge(author, person, label=reason)
-
-                # 使用 plotly 绘制网络图
-                pos = nx.spring_layout(G, k=0.5)  # 布局
-                edge_trace = []
-                edge_annotations = []  # 用于存储边的标注信息
-                for edge in G.edges(data=True):
-                    x0, y0 = pos[edge[0]]
-                    x1, y1 = pos[edge[1]]
-                    edge_trace.append(go.Scatter(
-                        x=[x0, x1, None], y=[y0, y1, None],
-                        line=dict(width=0.5, color='#888'),
-                        hoverinfo='text',
-                        mode='lines'
-                    ))
-
-                    # 计算边的中点位置，用于放置标注文字
-                    mid_x = (x0 + x1) / 2
-                    mid_y = (y0 + y1) / 2
-                    edge_annotations.append(
-                        dict(
-                            x=mid_x,
-                            y=mid_y,
-                            xref='x',
-                            yref='y',
-                            text=edge[2]['label'],  # 相连的原因作为标注文字
-                            showarrow=False,
-                            font=dict(size=10, color='black')
-                        )
-                    )
-
-                node_trace = go.Scatter(
-                    x=[], y=[], text=[], mode='markers+text', hoverinfo='text',
-                    marker=dict(
-                        showscale=True,
-                        colorscale='YlGnBu',
-                        size=10,
-                    )
-                )
-                for node in G.nodes():
-                    x, y = pos[node]
-                    node_trace['x'] += tuple([x])
-                    node_trace['y'] += tuple([y])
-                    node_trace['text'] += tuple([node])
-
-                fig = go.Figure(
-                    data=edge_trace + [node_trace],
-                    layout=go.Layout(
-                        title='<br>合作关系网络图',
-                        showlegend=False,
-                        hovermode='closest',
-                        margin=dict(b=20, l=5, r=5, t=40),
-                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        annotations=edge_annotations  # 添加边的标注信息
-                    )
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-            build_network_graph(selected)
+            build_network_graph(selected, papers)
 
 
 if __name__ == "__main__":
     main()
+                   
