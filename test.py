@@ -267,13 +267,13 @@ def search_online_info(author, institution):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
     for term in search_terms:
-        search_url = f"https://www.baidu.com/s?wd={term}"
+        search_url = f"https://www.bing.com/search?q={term}"  # 更换为必应搜索引擎
         try:
             response = requests.get(search_url, headers=headers)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
-            # 简单提取搜索结果的文本信息
-            results = soup.find_all('div', class_='result c-container')
+            # 提取网页正文内容
+            results = soup.find_all('p')
             info = ' '.join([result.get_text() for result in results])
             all_info += info + " "
         except requests.RequestException as e:
@@ -284,8 +284,11 @@ def search_online_info(author, institution):
 def get_zhipu_evaluation(selected, institution):
     # 联网搜索信息
     online_info = search_online_info(selected, institution)
+    # 清洗搜索信息
+    import re
+    online_info = re.sub(r'[^\w\s]', '', online_info)  # 去除特殊字符
     # 构建输入文本
-    input_text = f"请根据互联网信息对科研人员 {selected} （所属研究机构：{institution}）进行简介，然后根据国家科研诚信政策对他进行评价，并列举 5 个与他合作频繁的其他科研人员。搜索到的相关信息：{online_info}"
+    input_text = f"请详细对科研人员 {selected} （所属研究机构：{institution}）进行简介，根据国家科研诚信政策严格对他进行评价，并精准列举 5 个与他合作频繁的其他科研人员。如果搜索信息不足，请说明并尽量基于合理推测给出一些可能的方向。搜索到的相关信息：{online_info}"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -345,7 +348,7 @@ def main():
         if st.button("🏠 返回首页", help="点击返回首页"):
             st.markdown("[点击这里返回首页](https://chengyi10.wordpress.com/)", unsafe_allow_html=True)
 
-    # 尝试加载现有数据
+    #    # 尝试加载现有数据
     try:
         risk_df = pd.read_excel('risk_scores.xlsx')
         papers = pd.read_excel('实验数据.xlsx', sheet_name='论文')
