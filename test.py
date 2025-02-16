@@ -360,7 +360,7 @@ def build_network_graph(author, papers):
         ))
 
         # 计算边的中点位置，用于放置标注文字
-                mid_x = (x0 + x1) / 2
+        mid_x = (x0 + x1) / 2
         mid_y = (y0 + y1) / 2
         edge_annotations.append(
             dict(
