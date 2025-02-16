@@ -15,6 +15,8 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from zhipuai import ZhipuAI
 import os
+import requests
+from bs4 import BeautifulSoup
 
 # 设置智谱 API 密钥
 client = ZhipuAI(api_key="89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz")
@@ -258,37 +260,28 @@ def process_risk_data():
         '风险值': list(risk_scores.values())
     }), papers_df, projects_df
 
+# 联网搜索信息
+def search_online_info(author):
+    search_url = f"https://www.baidu.com/s?wd={author} 科研诚信"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
+    try:
+        response = requests.get(search_url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # 简单提取搜索结果的文本信息
+        results = soup.find_all('div', class_='result c-container')
+        info = ' '.join([result.get_text() for result in results])
+        return info
+    except requests.RequestException as e:
+        return f"网络请求出错：{str(e)}"
+
 # 调用智谱大模型进行评价
 def get_zhipu_evaluation(selected):
+    # 联网搜索信息
+    online_info = search_online_info(selected)
     # 构建输入文本
-    input_text = f"""请对科研人员 {selected} 进行综合评价，内容按照以下结构输出：
-一、学术背景分析（基于网络公开信息）
-1. 教育经历：毕业院校、学位信息
-2. 任职机构：当前及历史任职情况
-3. 研究方向：主要研究领域及细分方向
-4. 学术成果：代表性论文、专利、项目（列举3-5个重点成果）
-
-二、科研诚信评估（结合国家政策）
-根据以下政策分析历史记录：
-- 《科研诚信案件调查处理规则（试行）》
-- 《关于进一步加强科研诚信建设的若干意见》
-- 《科学技术活动违规行为处理暂行规定》
-评估维度：
-1. 行为严重性分析
-2. 整改情况追踪
-3. 潜在影响评估
-
-三、合作网络分析（基于公开数据）
-1. 高频合作者（列出5-10人）
-2. 合作形式分析（论文/项目/专利等）
-3. 机构关联网络
-4. 国际合作情况
-
-四、风险预警建议
-1. 监管关注建议
-2. 合作风险提示
-3. 项目评审建议
-"""
+    input_text = f"请根据互联网信息对科研人员 {selected} 进行评价，并提及国家的一些科研诚信政策。搜索到的相关信息：{online_info}"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
