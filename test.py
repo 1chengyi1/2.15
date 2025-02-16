@@ -263,20 +263,29 @@ def process_risk_data():
 
 # 联网搜索信息
 def search_online_info(author, institution):
-    search_terms = [f"{author} {institution} 科研成果", f"{author} {institution} 科研诚信", f"{author} {institution} 学术成就"]
+    search_terms = [
+        f"{author} {institution} 科研成果",
+        f"{author} {institution} 科研论文",
+        f"{author} {institution} 科研奖项",
+        f"{author} {institution} 科研诚信情况",
+        f"{author} {institution} 学术活动"
+    ]
     all_info = ""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     for term in search_terms:
         search_url = f"https://www.baidu.com/s?wd={term}"
         try:
             response = requests.get(search_url, headers=headers)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
-            # 简单提取搜索结果的文本信息
             results = soup.find_all('div', class_='result c-container')
-            info = ' '.join([result.get_text() for result in results])
-            all_info += info + " "
+            for result in results:
+                info = result.get_text()
+                # 简单过滤掉广告等无关信息
+                if "广告" not in info:
+                    all_info += info + " "
         except requests.RequestException as e:
             all_info += f"网络请求出错：{str(e)} "
     return all_info
@@ -288,19 +297,18 @@ def get_zhipu_evaluation(selected, institution):
     # 清洗搜索信息
     online_info = re.sub(r'[^\w\s]', '', online_info)
     # 构建输入文本
-    input_text = f"请评价一下 {institution} 的 {selected}，先对他进行简介，然后根据国家科研诚信政策对他进行评价。搜索到的相关信息：{online_info}"
+    input_text = f"请对 {institution} 的 {selected} 进行简介，然后依据国家科研诚信政策对其科研行为进行评价。搜索到的相关信息：{online_info}"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
             messages=[{"role": "user", "content": input_text}]
         )
-        # 检查响应是否成功
-        if response:
+        if response and response.choices:
             return response.choices[0].message.content
         else:
-            return f"请求失败，可能是网络问题或API调用异常"
+            return "未从智谱大模型获取到有效回复，请检查网络或 API 配置。"
     except Exception as e:
-        return f"发生异常：{str(e)}"
+        return f"调用智谱大模型时发生异常：{str(e)}"
 
 # ==========================
 # 可视化界面模块
@@ -315,21 +323,21 @@ def main():
     # 自定义CSS样式
     st.markdown("""
     <style>
-.high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
+    .high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
     @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
-.metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
+    .metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
     table {
         table - layout: fixed;
     }
     table td {
         white - space: normal;
     }
- .stDataFrame tbody tr {
+    .stDataFrame tbody tr {
         display: block;
         overflow - y: auto;
         height: 200px;
     }
- .stDataFrame tbody {
+    .stDataFrame tbody {
         display: block;
     }
     </style>
