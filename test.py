@@ -314,21 +314,26 @@ def main():
     # 自定义CSS样式
     st.markdown("""
     <style>
-.high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
+   .high-risk { color: red; font-weight: bold; animation: blink 1s infinite; }
     @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
-.metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
+   .metric-box { padding: 20px; border-radius: 10px; background: #f0f2f6; margin: 10px; }
     table {
-        table - layout: fixed;
+        table-layout: fixed;
     }
     table td {
-        white - space: normal;
+        white-space: normal;
     }
- .stDataFrame tbody tr {
+   .stDataFrame tbody tr {
         display: block;
-        overflow - y: auto;
+        overflow-y: auto;
         height: 200px;
     }
- .stDataFrame tbody {
+   .stDataFrame tbody {
+        display: block;
+    }
+   .scrollable-table {
+        max-height: 300px;
+        overflow-y: auto;
         display: block;
     }
     </style>
@@ -370,7 +375,7 @@ def main():
             st.warning("未找到匹配的研究人员")
             return
 
-        # 直接选择第一个匹配人员
+        # 直接选择第一个匹配
         selected = candidates['作者'].iloc[0]
 
         # 获取详细信息
