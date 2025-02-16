@@ -263,7 +263,7 @@ def process_risk_data():
 
 # 联网搜索信息
 def search_online_info(author, institution):
-    search_terms = [f"{author} {institution} 科研成果", f"{author} {institution} 科研诚信", f"{author} {institution} 合作科研人员"]
+    search_terms = [f"{author} {institution} 科研成果", f"{author} {institution} 科研诚信", f"{author} {institution} 学术成就"]
     all_info = ""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
@@ -282,14 +282,13 @@ def search_online_info(author, institution):
     return all_info
 
 # 调用智谱大模型进行评价
-def get_zhipu_evaluation(selected, institution, co_authors):
+def get_zhipu_evaluation(selected, institution):
     # 联网搜索信息
     online_info = search_online_info(selected, institution)
     # 清洗搜索信息
     online_info = re.sub(r'[^\w\s]', '', online_info)
-    co_authors_str = ', '.join(co_authors)
     # 构建输入文本
-    input_text = f"请根据互联网信息对科研人员 {selected} （所属研究机构：{institution}）进行简介，然后根据国家科研诚信政策对他进行评价。以下是从数据中提取的与他合作频繁的 5 个科研人员：{co_authors_str}。搜索到的相关信息：{online_info}"
+    input_text = f"请评价一下 {institution} 的 {selected}，先对他进行简介，然后根据国家科研诚信政策对他进行评价。搜索到的相关信息：{online_info}"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -386,25 +385,6 @@ def main():
         else:
             institution = "未找到研究机构信息"
 
-        # 从数据中提取与该作者合作频繁的科研人员
-        co_authors_count = {}
-        for _, row in paper_records.iterrows():
-            # 假设数据中有其他作者列，根据实际情况修改
-            # 这里简单示例，假设存在一个包含所有作者的字符串列 '所有作者'，以逗号分隔
-            if '所有作者' in row:
-                all_authors = row['所有作者'].split(',')
-                for co_author in all_authors:
-                    co_author = co_author.strip()
-                    if co_author != selected:
-                        if co_author in co_authors_count:
-                            co_authors_count[co_author] += 1
-                        else:
-                            co_authors_count[co_author] = 1
-
-        # 按合作次数排序并选取前 5 个
-        sorted_co_authors = sorted(co_authors_count.items(), key=lambda item: item[1], reverse=True)
-        top_5_co_authors = [author for author, _ in sorted_co_authors[:5]]
-
         # 查找与查询作者有关的人
         related_people = papers[
             (papers['研究机构'] == papers[papers['姓名'] == selected]['研究机构'].iloc[0]) |
@@ -458,7 +438,7 @@ def main():
         # 新增：调用智谱大模型的按钮
         if st.button(f"📝 获取 {selected} 的大模型评价"):
             with st.spinner("正在调用智谱大模型进行评价..."):
-                evaluation = get_zhipu_evaluation(selected, institution, top_5_co_authors)
+                evaluation = get_zhipu_evaluation(selected, institution)
             st.subheader("📝 智谱大模型评价")
             st.write(evaluation)
 
