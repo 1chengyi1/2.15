@@ -19,7 +19,7 @@ import plotly.graph_objects as go
 client = ZhipuAI(api_key="89c41de3c3a34f62972bc75683c66c72.ZGwzmpwgMfjtmksz")
 
 # ==========================
-# 数据预处理和风险值计算模块
+# 数据预处理模块
 # ==========================
 @st.cache_data(show_spinner=False)
 def process_risk_data():
@@ -79,6 +79,7 @@ def process_risk_data():
         '其他轻微不端行为': 1
     }
 
+    # 读取数据并构建网络（保持原有网络构建逻辑不变）
     # 读取原始数据
     papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
     projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
@@ -257,14 +258,59 @@ def process_risk_data():
         '风险值': list(risk_scores.values())
     }), papers_df, projects_df
 
-# 修正后的智谱API调用
+# ==========================
+# 智谱大模型交互模块
+# ==========================
 def get_zhipu_evaluation(selected, paper_records, project_records):
-    prompt_template = f"""..."""
+    """获取包含网络搜索的深度分析报告"""
+    prompt_template = f"""
+请为科研人员【{selected}】生成深度分析报告，需包含以下内容：
+
+一、学术背景分析（基于网络公开信息）
+1. 教育经历：毕业院校、学位信息
+2. 任职机构：当前及历史任职情况
+3. 研究方向：主要研究领域及细分方向
+4. 学术成果：代表性论文、专利、项目（列举3-5个重点成果）
+
+二、科研诚信评估（结合国家政策）
+根据以下政策分析历史记录：
+- 《科研诚信案件调查处理规则（试行）》
+- 《关于进一步加强科研诚信建设的若干意见》
+- 《科学技术活动违规行为处理暂行规定》
+评估维度：
+1. 行为严重性分析
+2. 整改情况追踪
+3. 潜在影响评估
+
+三、合作网络分析（基于公开数据）
+1. 高频合作者（列出5-10人）
+2. 合作形式分析（论文/项目/专利等）
+3. 机构关联网络
+4. 国际合作情况
+
+四、风险预警建议
+1. 监管关注建议
+2. 合作风险提示
+3. 项目评审建议
+
+格式要求：
+## 学术背景
+...
+## 诚信评估  
+...
+## 合作网络
+...
+## 风险预警
+..."""
+
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
-            messages=[{"role": "user", "content": prompt_template}],
-            temperature=0.3  # 参数位置修正
+            messages=[{
+                "role": "user",
+                "content": prompt_template,
+                "temperature": 0.3
+            }]
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -275,34 +321,35 @@ def get_zhipu_evaluation(selected, paper_records, project_records):
 # ==========================
 def main():
     st.set_page_config(
-        page_title="科研人员诚信风险预警平台",
+        page_title="科研诚信智能分析平台",
         page_icon="🔬",
         layout="wide"
     )
 
-    # 自定义CSS样式
+    # 自定义样式
     st.markdown("""
     <style>
-.high - risk { color: red; font - weight: bold; animation: blink 1s infinite; }
-    @keyframes blink { 0% {opacity:1;} 50% {opacity:0;} 100% {opacity:1;} }
-.metric - box { padding: 20px; border - radius: 10px; background: #f0f2f6; margin: 10px; }
-    table {
-        table - layout: fixed;
+    .report-section { 
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin: 15px 0;
+        background: white;
     }
-    table td {
-        white - space: normal;
+    .section-title {
+        color: #1e3d6d;
+        border-left: 4px solid #1e3d6d;
+        padding-left: 10px;
     }
- .stDataFrame tbody tr {
-        display: block;
-        overflow - y: auto;
-        height: 200px;
-    }
- .stDataFrame tbody {
-        display: block;
+    .risk-alert {
+        color: #d32f2f;
+        background: #ffebee;
+        padding: 15px;
+        border-radius: 8px;
     }
     </style>
     """, unsafe_allow_html=True)
-
+    
     # 侧边栏控制面板
     with st.sidebar:
         st.title("控制面板")
@@ -327,11 +374,11 @@ def main():
             risk_df.to_excel('risk_scores.xlsx', index=False)
 
     # 主界面
-    st.title("🔍 科研人员信用风险预警系统")
-
-    # 搜索框
-    search_term = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...")
-
+    st.title("🔍 科研人员深度分析系统")
+    
+    # 搜索功能（保持原有搜索逻辑不变）
+    search_term = st.text_input("输入研究人员姓名：", placeholder="支持中英文姓名搜索...")
+    
     if search_term:
         # 模糊匹配
         candidates = risk_df[risk_df['作者'].str.contains(search_term)]
@@ -396,14 +443,55 @@ def main():
         cols[1].metric("风险等级",
                        f"{'⚠️ 高风险' if risk_level == 'high' else '✅ 低风险'}",
                        help="高风险阈值：12")
-
-        # 新增：调用智谱大模型的按钮
-        if st.button(f"📝 获取 {selected} 的大模型评价"):
-            with st.spinner("正在调用智谱大模型进行评价..."):
-                # 修复参数传递问题，添加 risk_level 参数
-                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, risk_level)
-            st.subheader("📝 智谱大模型评价")
-            st.write(evaluation)
+        
+        # ======================
+        # 智能分析报告生成
+        # ======================
+        if st.button(f"🕵️ 生成{selected}的智能分析报告"):
+            with st.spinner("正在通过学术大数据生成深度分析..."):
+                try:
+                    report = get_zhipu_evaluation(selected, paper_records, project_records)
+                    
+                    # 结构化显示报告
+                    sections = {
+                        "## 学术背景": "academic",
+                        "## 诚信评估": "integrity",
+                        "## 合作网络": "collab",
+                        "## 风险预警": "risk"
+                    }
+                    
+                    current_section = None
+                    content_buffer = []
+                    
+                    for line in report.split('\n'):
+                        line = line.strip()
+                        if line in sections:
+                            if current_section:
+                                # 输出缓冲内容
+                                with st.container():
+                                    st.markdown(f'<div class="report-section" id="{sections[current_section]}">', unsafe_allow_html=True)
+                                    st.markdown(f'<div class="section-title">{current_section}</div>', unsafe_allow_html=True)
+                                    st.markdown('\n'.join(content_buffer))
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                            current_section = line
+                            content_buffer = []
+                        else:
+                            content_buffer.append(line)
+                    
+                    # 处理最后一个部分
+                    if current_section:
+                        with st.container():
+                            st.markdown(f'<div class="report-section" id="{sections[current_section]}">', unsafe_allow_html=True)
+                            st.markdown(f'<div class="section-title">{current_section}</div>', unsafe_allow_html=True)
+                            st.markdown('\n'.join(content_buffer))
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # 特别标注风险预警
+                            if "风险预警" in current_section:
+                                st.markdown('<div class="risk-alert">⚠️ 请重点关注风险预警内容</div>', unsafe_allow_html=True)
+                                
+                except Exception as e:
+                    st.error(f"报告生成失败：{str(e)}")
 
         # ======================
         # 关系网络可视化
