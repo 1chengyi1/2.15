@@ -262,26 +262,30 @@ def process_risk_data():
 
 # 联网搜索信息
 def search_online_info(author):
-    search_url = f"https://www.baidu.com/s?wd={author} 科研诚信"
+    search_terms = [f"{author} 科研成果", f"{author} 科研诚信", f"{author} 合作科研人员"]
+    all_info = ""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
-    try:
-        response = requests.get(search_url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        # 简单提取搜索结果的文本信息
-        results = soup.find_all('div', class_='result c-container')
-        info = ' '.join([result.get_text() for result in results])
-        return info
-    except requests.RequestException as e:
-        return f"网络请求出错：{str(e)}"
+    for term in search_terms:
+        search_url = f"https://www.baidu.com/s?wd={term}"
+        try:
+            response = requests.get(search_url, headers=headers)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # 简单提取搜索结果的文本信息
+            results = soup.find_all('div', class_='result c-container')
+            info = ' '.join([result.get_text() for result in results])
+            all_info += info + " "
+        except requests.RequestException as e:
+            all_info += f"网络请求出错：{str(e)} "
+    return all_info
 
 # 调用智谱大模型进行评价
 def get_zhipu_evaluation(selected):
     # 联网搜索信息
     online_info = search_online_info(selected)
     # 构建输入文本
-    input_text = f"请根据互联网信息对科研人员 {selected} 进行评价，并提及国家的一些科研诚信政策。搜索到的相关信息：{online_info}"
+    input_text = f"请根据互联网信息对科研人员 {selected} 进行全面的介绍，包括他的科研成果、科研诚信情况等，并介绍一下和他合作很频繁的其他科研人员。同时提及国家的一些科研诚信政策。搜索到的相关信息：{online_info}"
     try:
         response = client.chat.completions.create(
             model="glm-4v-plus",
@@ -379,8 +383,7 @@ def main():
             (papers['不端内容'] == papers[papers['姓名'] == selected]['不端内容'].iloc[0])
         ]['姓名'].unique()
         related_people = [person for person in related_people if person != selected]
-
-        # ======================
+                # ======================
         # 信息展示
         # ======================
         st.subheader("📄 论文记录")
