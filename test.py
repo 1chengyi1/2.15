@@ -386,7 +386,7 @@ def main():
             )
         else:
             st.info("暂无论文不端记录")
-
+        
         st.subheader("📋 项目记录")
         if not project_records.empty:
             st.markdown(project_records.to_html(escape=False), unsafe_allow_html=True)
@@ -411,10 +411,8 @@ def main():
             st.subheader("📝 智谱大模型评价")
             st.write(evaluation)
 
-        # ======================
-        # 关系网络可视化
-        # ======================
-        with st.expander("🕸️ 展开合作关系网络", expanded=True):
+        # 新增：合作关系网络图按钮
+        if st.button("🕸️ 查看合作关系网络"):
             def build_network_graph(author):
                 G = nx.Graph()
                 G.add_node(author)
