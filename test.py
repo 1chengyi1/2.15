@@ -335,46 +335,69 @@ def main():
     # 主界面
     st.title("🔍 科研人员信用风险预警系统")
 
+    # 初始化会话状态
+    if 'search_name' not in st.session_state:
+        st.session_state.search_name = ''
+    if 'search_institution' not in st.session_state:
+        st.session_state.search_institution = ''
+    if 'search_button_clicked' not in st.session_state:
+        st.session_state.search_button_clicked = False
+    if 'selected' not in st.session_state:
+        st.session_state.selected = None
+    if 'author_risk' not in st.session_state:
+        st.session_state.author_risk = None
+    if 'paper_records' not in st.session_state:
+        st.session_state.paper_records = pd.DataFrame()
+    if 'project_records' not in st.session_state:
+        st.session_state.project_records = pd.DataFrame()
+    if 'related_people' not in st.session_state:
+        st.session_state.related_people = []
+    if 'evaluation' not in st.session_state:
+        st.session_state.evaluation = None
+
     # 使用 st.columns 将输入框和按钮放在同一行
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
-        search_name = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...")
+        st.session_state.search_name = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...", value=st.session_state.search_name)
     with col2:
-        search_institution = st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...")
+        st.session_state.search_institution = st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...", value=st.session_state.search_institution)
     with col3:
         search_button = st.button("查询")
 
-    if search_button and search_name and search_institution:
+    if search_button and st.session_state.search_name and st.session_state.search_institution:
+        st.session_state.search_button_clicked = True
         # 模糊匹配
-        name_candidates = risk_df[risk_df['作者'].str.contains(search_name)]
-        paper_matches = papers[papers['姓名'].str.contains(search_name) & papers['研究机构'].str.contains(search_institution)]
-        project_matches = projects[projects['姓名'].str.contains(search_name) & projects['研究机构'].str.contains(search_institution)]
+        name_candidates = risk_df[risk_df['作者'].str.contains(st.session_state.search_name)]
+        paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
+        project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name) & projects['研究机构'].str.contains(st.session_state.search_institution)]
 
         if len(paper_matches) == 0 and len(project_matches) == 0:
             st.warning("未找到匹配的研究人员")
+            st.session_state.search_button_clicked = False
             return
 
         # 直接选择第一个匹配人员
-        selected = name_candidates['作者'].iloc[0]
+        st.session_state.selected = name_candidates['作者'].iloc[0]
 
         # 获取详细信息
-        author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
-        paper_records = papers[papers['姓名'] == selected]
-        project_records = projects[projects['姓名'] == selected]
+        st.session_state.author_risk = risk_df[risk_df['作者'] == st.session_state.selected].iloc[0]['风险值']
+        st.session_state.paper_records = papers[papers['姓名'] == st.session_state.selected]
+        st.session_state.project_records = projects[projects['姓名'] == st.session_state.selected]
 
         # 查找与查询作者有关的人
-        related_people = papers[
-            (papers['研究机构'] == papers[papers['姓名'] == selected]['研究机构'].iloc[0]) |
-            (papers['研究方向'] == papers[papers['姓名'] == selected]['研究方向'].iloc[0]) |
-            (papers['不端内容'] == papers[papers['姓名'] == selected]['不端内容'].iloc[0])
+        st.session_state.related_people = papers[
+            (papers['研究机构'] == papers[papers['姓名'] == st.session_state.selected]['研究机构'].iloc[0]) |
+            (papers['研究方向'] == papers[papers['姓名'] == st.session_state.selected]['研究方向'].iloc[0]) |
+            (papers['不端内容'] == papers[papers['姓名'] == st.session_state.selected]['不端内容'].iloc[0])
         ]['姓名'].unique()
-        related_people = [person for person in related_people if person != selected]
+        st.session_state.related_people = [person for person in st.session_state.related_people if person != st.session_state.selected]
 
+    if st.session_state.search_button_clicked:
         # ======================
         # 信息展示
         # ======================
         st.subheader("📄 论文记录")
-        if not paper_records.empty:
+        if not st.session_state.paper_records.empty:
             # 添加竖向滚动条
             st.markdown(
                 """
@@ -390,35 +413,41 @@ def main():
             )
             # 将 DataFrame 转换为 HTML，并添加滚动条样式
             st.markdown(
-                f'<div class="scrollable-table">{paper_records.to_html(escape=False, index=False)}</div>',
+                f'<div class="scrollable-table">{st.session_state.paper_records.to_html(escape=False, index=False)}</div>',
                 unsafe_allow_html=True
             )
         else:
             st.info("暂无论文不端记录")
 
         st.subheader("📋 项目记录")
-        if not project_records.empty:
-            st.markdown(project_records.to_html(escape=False), unsafe_allow_html=True)
+        if not st.session_state.project_records.empty:
+            st.markdown(st.session_state.project_records.to_html(escape=False), unsafe_allow_html=True)
         else:
             st.info("暂无项目不端记录")
 
         # 风险指标
         st.subheader("📊 风险分析")
-        risk_level = "high" if author_risk > 12 else "low"
+        risk_level = "high" if st.session_state.author_risk > 12 else "low"
         cols = st.columns(4)
-        cols[0].metric("信用风险值", f"{author_risk:.2f}",
+        cols[0].metric("信用风险值", f"{st.session_state.author_risk:.2f}",
                        delta_color="inverse" if risk_level == "high" else "normal")
         cols[1].metric("风险等级",
                        f"{'⚠️ 高风险' if risk_level == 'high' else '✅ 低风险'}",
                        help="高风险阈值：12")
 
         # 新增：调用智谱大模型的按钮
-        if st.button(f"📝 获取 {selected} 的大模型评价"):
+        if st.button(f"📝 获取 {st.session_state.selected} 的大模型评价"):
             with st.spinner("正在调用智谱大模型进行评价..."):
                 # 修正传递参数，传递 related_people
-                evaluation = get_zhipu_evaluation(selected, paper_records, project_records, related_people)
+                st.session_state.evaluation = get_zhipu_evaluation(
+                    st.session_state.selected,
+                    st.session_state.paper_records,
+                    st.session_state.project_records,
+                    st.session_state.related_people
+                )
+        if st.session_state.evaluation is not None:
             st.subheader("📝 智谱大模型评价")
-            st.write(evaluation)
+            st.write(st.session_state.evaluation)
 
         # 新增：合作关系网络图按钮
         if st.button("🕸️ 查看合作关系网络"):
@@ -502,8 +531,9 @@ def main():
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-            build_network_graph(selected)
+            build_network_graph(st.session_state.selected)
 
 
 if __name__ == "__main__":
     main()
+   
