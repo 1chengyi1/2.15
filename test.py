@@ -335,11 +335,16 @@ def main():
     # 主界面
     st.title("🔍 科研人员信用风险预警系统")
 
-    # 搜索框
-    search_name = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...")
-    search_institution = st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...")
+    # 使用 st.columns 将输入框和按钮放在同一行
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        search_name = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...")
+    with col2:
+        search_institution = st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...")
+    with col3:
+        search_button = st.button("查询")
 
-    if search_name and search_institution:
+    if search_button and search_name and search_institution:
         # 模糊匹配
         name_candidates = risk_df[risk_df['作者'].str.contains(search_name)]
         paper_matches = papers[papers['姓名'].str.contains(search_name) & papers['研究机构'].str.contains(search_institution)]
@@ -390,7 +395,7 @@ def main():
             )
         else:
             st.info("暂无论文不端记录")
-        
+
         st.subheader("📋 项目记录")
         if not project_records.empty:
             st.markdown(project_records.to_html(escape=False), unsafe_allow_html=True)
