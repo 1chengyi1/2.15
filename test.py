@@ -279,6 +279,9 @@ def get_zhipu_evaluation(selected, paper_records, project_records, related_peopl
 # ==========================
 # 可视化界面模块
 # ==========================
+# ==========================
+# 可视化界面模块
+# ==========================
 def main():
     st.set_page_config(
         page_title="科研人员诚信风险预警平台",
@@ -336,11 +339,15 @@ def main():
     st.title("🔍 科研人员信用风险预警系统")
 
     # 搜索框
-    search_term = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...")
+    col1, col2 = st.columns(2)
+    with col1:
+        search_name = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...")
+    with col2:
+        search_institution = st.text_input("输入研究机构：", placeholder="支持模糊搜索...")
 
-    if search_term:
+    if search_name and search_institution:
         # 模糊匹配
-        candidates = risk_df[risk_df['作者'].str.contains(search_term)]
+        candidates = risk_df[(risk_df['作者'].str.contains(search_name)) & (risk_df['研究机构'].str.contains(search_institution))]
         if len(candidates) == 0:
             st.warning("未找到匹配的研究人员")
             return
@@ -350,8 +357,8 @@ def main():
 
         # 获取详细信息
         author_risk = risk_df[risk_df['作者'] == selected].iloc[0]['风险值']
-        paper_records = papers[papers['姓名'] == selected]
-        project_records = projects[projects['姓名'] == selected]
+        paper_records = papers[(papers['姓名'] == selected) & (papers['研究机构'].str.contains(search_institution))]
+        project_records = projects[(projects['姓名'] == selected) & (projects['研究机构'].str.contains(search_institution))]
 
         # 查找与查询作者有关的人
         related_people = papers[
