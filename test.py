@@ -322,16 +322,6 @@ def main():
         if st.button("🏠 返回首页", help="点击返回首页"):
             st.markdown("[点击这里返回首页](https://chengyi10.wordpress.com/)", unsafe_allow_html=True)
 
-        # 添加下载按钮
-        if os.path.exists('risk_scores.xlsx'):
-            with open('risk_scores.xlsx', "rb") as file:
-                st.download_button(
-                    label="下载风险值数据(Excel)",
-                    data=file,
-                    file_name='risk_scores.xlsx',
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-
     # 尝试加载现有数据
     try:
         risk_df = pd.read_excel('risk_scores.xlsx')
@@ -546,3 +536,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+   
