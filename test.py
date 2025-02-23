@@ -322,16 +322,6 @@ def main():
         if st.button("🏠 返回首页", help="点击返回首页"):
             st.markdown("[点击这里返回首页](https://chengyi10.wordpress.com/)", unsafe_allow_html=True)
 
-        # 添加下载按钮
-        if os.path.exists('risk_scores.xlsx'):
-            with open('risk_scores.xlsx', "rb") as file:
-                st.download_button(
-                    label="下载风险值数据(Excel)",
-                    data=file,
-                    file_name='risk_scores.xlsx',
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-
     # 尝试加载现有数据
     try:
         risk_df = pd.read_excel('risk_scores.xlsx')
@@ -542,6 +532,32 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
 
             build_network_graph(st.session_state.selected)
+
+        # 下载查询结果
+        result_dict = {
+            '论文记录': st.session_state.paper_records,
+            '项目记录': st.session_state.project_records,
+            '风险分析': pd.DataFrame({
+                '作者': [st.session_state.selected],
+                '信用风险值': [st.session_state.author_risk],
+                '风险等级': ['高风险' if risk_level == 'high' else '低风险']
+            })
+        }
+        if st.session_state.evaluation:
+            result_dict['智谱大模型评价'] = pd.DataFrame({'评价内容': [st.session_state.evaluation]})
+
+        with pd.ExcelWriter('查询结果.xlsx') as writer:
+            for sheet_name, df in result_dict.items():
+                if not df.empty:
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+        with open('查询结果.xlsx', 'rb') as file:
+            st.download_button(
+                label="下载查询结果",
+                data=file,
+                file_name='查询结果.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
 
 
 if __name__ == "__main__":
