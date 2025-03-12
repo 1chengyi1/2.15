@@ -355,21 +355,6 @@ def main():
     if 'evaluation' not in st.session_state:
         st.session_state.evaluation = None
 
-    # 在未查询时展示整体作者风险值柱状图
-    if not st.session_state.search_button_clicked:
-        fig = go.Figure(data=[go.Bar(
-            x=risk_df['作者'],
-            y=risk_df['风险值'],
-            text=risk_df['风险值'],
-            textposition='auto'
-        )])
-        fig.update_layout(
-            title='整体作者风险值分布',
-            xaxis_title='作者',
-            yaxis_title='风险值'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
     # 使用 st.columns 将输入框和按钮放在同一行
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
@@ -378,6 +363,22 @@ def main():
         st.session_state.search_institution = st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...", value=st.session_state.search_institution)
     with col3:
         search_button = st.button("查询")
+
+    # 在查询按钮下方展示散点图
+    if not st.session_state.search_button_clicked:
+        fig = go.Figure(data=[go.Scatter(
+            x=risk_df['作者'],
+            y=risk_df['风险值'],
+            mode='markers',
+            text=risk_df['风险值'],
+            hoverinfo='text+x'
+        )])
+        fig.update_layout(
+            title='整体作者风险值散点图',
+            xaxis_title='作者',
+            yaxis_title='风险值'
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     if search_button and st.session_state.search_name and st.session_state.search_institution:
         st.session_state.search_button_clicked = True
