@@ -364,24 +364,9 @@ def main():
     with col3:
         search_button = st.button("查询")
 
-    # 仅在未点击查询按钮时展示散点图
-    if not st.session_state.search_button_clicked:
-        fig = go.Figure(data=[go.Scatter(
-            x=risk_df['作者'],
-            y=risk_df['风险值'],
-            mode='markers',
-            text=risk_df['风险值'],
-            hoverinfo='text+x'
-        )])
-        fig.update_layout(
-            title='整体作者风险值散点图',
-            xaxis_title='作者',
-            yaxis_title='风险值'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
     if search_button and st.session_state.search_name and st.session_state.search_institution:
         st.session_state.search_button_clicked = True
+        st.write(f"查询按钮点击后，search_button_clicked 的值: {st.session_state.search_button_clicked}")
         # 模糊匹配
         name_candidates = risk_df[risk_df['作者'].str.contains(st.session_state.search_name)]
         paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
@@ -407,6 +392,21 @@ def main():
             (papers['不端内容'] == papers[papers['姓名'] == st.session_state.selected]['不端内容'].iloc[0])
         ]['姓名'].unique()
         st.session_state.related_people = [person for person in st.session_state.related_people if person != st.session_state.selected]
+
+    if not st.session_state.search_button_clicked:
+        fig = go.Figure(data=[go.Scatter(
+            x=risk_df['作者'],
+            y=risk_df['风险值'],
+            mode='markers',
+            text=risk_df['风险值'],
+            hoverinfo='text+x'
+        )])
+        fig.update_layout(
+            title='整体作者风险值散点图',
+            xaxis_title='作者',
+            yaxis_title='风险值'
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     if st.session_state.search_button_clicked:
         # ======================
