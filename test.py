@@ -355,6 +355,23 @@ def main():
     if 'evaluation' not in st.session_state:
         st.session_state.evaluation = None
 
+    # 在未查询时展示所有作者与风险值的图表
+    if not st.session_state.search_button_clicked:
+        chart_type = st.selectbox("选择图表类型", ["柱状图", "折线图"])
+        if chart_type == "柱状图":
+            fig = go.Figure(data=[go.Bar(
+                x=risk_df['作者'],
+                y=risk_df['风险值']
+            )])
+        else:
+            fig = go.Figure(data=[go.Scatter(
+                x=risk_df['作者'],
+                y=risk_df['风险值'],
+                mode='lines+markers'
+            )])
+        fig.update_layout(title='所有作者的风险值', xaxis_title='作者', yaxis_title='风险值')
+        st.plotly_chart(fig, use_container_width=True)
+
     # 使用 st.columns 将输入框和按钮放在同一行
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
