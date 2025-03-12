@@ -366,7 +366,6 @@ def main():
 
     if search_button and st.session_state.search_name and st.session_state.search_institution:
         st.session_state.search_button_clicked = True
-        st.write(f"查询按钮点击后，search_button_clicked 的值: {st.session_state.search_button_clicked}")
         # 模糊匹配
         name_candidates = risk_df[risk_df['作者'].str.contains(st.session_state.search_name)]
         paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
