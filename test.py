@@ -401,7 +401,7 @@ def main():
             hoverinfo='text+x'
         )])
         fig.update_layout(
-            title='整体作者风险值散点图',
+            title='作者风险值散点图',
             xaxis_title='作者',
             yaxis_title='风险值'
         )
