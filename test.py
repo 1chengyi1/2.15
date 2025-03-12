@@ -364,7 +364,7 @@ def main():
     with col3:
         search_button = st.button("查询")
 
-    # 在查询按钮下方展示散点图
+    # 仅在未点击查询按钮时展示散点图
     if not st.session_state.search_button_clicked:
         fig = go.Figure(data=[go.Scatter(
             x=risk_df['作者'],
