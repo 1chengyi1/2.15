@@ -277,13 +277,10 @@ def get_zhipu_evaluation(selected, paper_records, project_records, related_peopl
         return f"发生异常：{str(e)}"
 
 # 查询回调函数
-def perform_search():
+def perform_search(risk_df, papers, projects):
     if st.session_state.search_name:
         st.session_state.search_button_clicked = True
         # 模糊匹配
-        risk_df = pd.read_excel('risk_scores.xlsx')
-        papers = pd.read_excel('实验数据.xlsx', sheet_name='论文')
-        projects = pd.read_excel('实验数据.xlsx', sheet_name='项目')
         name_candidates = risk_df[risk_df['作者'].str.contains(st.session_state.search_name)]
         if st.session_state.search_institution:
             paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
@@ -395,11 +392,11 @@ def main():
     # 使用 st.columns 将输入框和按钮放在同一行
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
-        st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...", value=st.session_state.search_name, key='search_name_input', on_change=perform_search)
+        st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...", value=st.session_state.search_name, key='search_name_input', on_change=perform_search, args=(risk_df, papers, projects))
     with col2:
-        st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...", value=st.session_state.search_institution, key='search_institution_input', on_change=perform_search)
+        st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...", value=st.session_state.search_institution, key='search_institution_input', on_change=perform_search, args=(risk_df, papers, projects))
     with col3:
-        search_button = st.button("查询", on_click=perform_search)
+        search_button = st.button("查询", on_click=perform_search, args=(risk_df, papers, projects))
 
     if not st.session_state.search_button_clicked:
         fig = go.Figure(data=[go.Scatter(
