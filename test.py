@@ -279,6 +279,9 @@ def get_zhipu_evaluation(selected, paper_records, project_records, related_peopl
 # 定义查询函数
 def perform_search():
     global risk_df, papers, projects
+    st.write("perform_search 函数被调用")  # 调试信息
+    st.write(f"搜索姓名: {st.session_state.search_name}")
+    st.write(f"搜索机构: {st.session_state.search_institution}")
     if st.session_state.search_name and not st.session_state.search_institution:
         st.session_state.search_button_clicked = True
         # 只根据姓名模糊匹配
