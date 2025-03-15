@@ -276,6 +276,43 @@ def get_zhipu_evaluation(selected, paper_records, project_records, related_peopl
     except Exception as e:
         return f"发生异常：{str(e)}"
 
+# 查询回调函数
+def perform_search():
+    if st.session_state.search_name:
+        st.session_state.search_button_clicked = True
+        # 模糊匹配
+        risk_df = pd.read_excel('risk_scores.xlsx')
+        papers = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+        projects = pd.read_excel('实验数据.xlsx', sheet_name='项目')
+        name_candidates = risk_df[risk_df['作者'].str.contains(st.session_state.search_name)]
+        if st.session_state.search_institution:
+            paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
+            project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name) & projects['研究机构'].str.contains(st.session_state.search_institution)]
+        else:
+            paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name)]
+            project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name)]
+
+        if len(paper_matches) == 0 and len(project_matches) == 0:
+            st.warning("未找到匹配的研究人员")
+            st.session_state.search_button_clicked = False
+            return
+
+        # 直接选择第一个匹配人员
+        st.session_state.selected = name_candidates['作者'].iloc[0]
+
+        # 获取详细信息
+        st.session_state.author_risk = risk_df[risk_df['作者'] == st.session_state.selected].iloc[0]['风险值']
+        st.session_state.paper_records = papers[papers['姓名'] == st.session_state.selected]
+        st.session_state.project_records = projects[projects['姓名'] == st.session_state.selected]
+
+        # 查找与查询作者有关的人
+        st.session_state.related_people = papers[
+            (papers['研究机构'] == papers[papers['姓名'] == st.session_state.selected]['研究机构'].iloc[0]) |
+            (papers['研究方向'] == papers[papers['姓名'] == st.session_state.selected]['研究方向'].iloc[0]) |
+            (papers['不端内容'] == papers[papers['姓名'] == st.session_state.selected]['不端内容'].iloc[0])
+        ]['姓名'].unique()
+        st.session_state.related_people = [person for person in st.session_state.related_people if person != st.session_state.selected]
+
 # ==========================
 # 可视化界面模块
 # ==========================
@@ -358,43 +395,11 @@ def main():
     # 使用 st.columns 将输入框和按钮放在同一行
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
-        st.session_state.search_name = st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...", value=st.session_state.search_name)
+        st.text_input("输入研究人员姓名：", placeholder="支持模糊搜索...", value=st.session_state.search_name, key='search_name_input', on_change=perform_search)
     with col2:
-        st.session_state.search_institution = st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...", value=st.session_state.search_institution)
+        st.text_input("输入研究人员研究机构：", placeholder="支持模糊搜索...", value=st.session_state.search_institution, key='search_institution_input', on_change=perform_search)
     with col3:
-        search_button = st.button("查询")
-
-    if search_button and st.session_state.search_name:
-        st.session_state.search_button_clicked = True
-        # 模糊匹配
-        name_candidates = risk_df[risk_df['作者'].str.contains(st.session_state.search_name)]
-        if st.session_state.search_institution:
-            paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
-            project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name) & projects['研究机构'].str.contains(st.session_state.search_institution)]
-        else:
-            paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name)]
-            project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name)]
-
-        if len(paper_matches) == 0 and len(project_matches) == 0:
-            st.warning("未找到匹配的研究人员")
-            st.session_state.search_button_clicked = False
-            return
-
-        # 直接选择第一个匹配人员
-        st.session_state.selected = name_candidates['作者'].iloc[0]
-
-        # 获取详细信息
-        st.session_state.author_risk = risk_df[risk_df['作者'] == st.session_state.selected].iloc[0]['风险值']
-        st.session_state.paper_records = papers[papers['姓名'] == st.session_state.selected]
-        st.session_state.project_records = projects[projects['姓名'] == st.session_state.selected]
-
-        # 查找与查询作者有关的人
-        st.session_state.related_people = papers[
-            (papers['研究机构'] == papers[papers['姓名'] == st.session_state.selected]['研究机构'].iloc[0]) |
-            (papers['研究方向'] == papers[papers['姓名'] == st.session_state.selected]['研究方向'].iloc[0]) |
-            (papers['不端内容'] == papers[papers['姓名'] == st.session_state.selected]['不端内容'].iloc[0])
-        ]['姓名'].unique()
-        st.session_state.related_people = [person for person in st.session_state.related_people if person != st.session_state.selected]
+        search_button = st.button("查询", on_click=perform_search)
 
     if not st.session_state.search_button_clicked:
         fig = go.Figure(data=[go.Scatter(
