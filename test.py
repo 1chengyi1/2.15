@@ -364,12 +364,16 @@ def main():
     with col3:
         search_button = st.button("查询")
 
-    if search_button and st.session_state.search_name and st.session_state.search_institution:
+    if search_button and st.session_state.search_name:
         st.session_state.search_button_clicked = True
         # 模糊匹配
         name_candidates = risk_df[risk_df['作者'].str.contains(st.session_state.search_name)]
-        paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
-        project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name) & projects['研究机构'].str.contains(st.session_state.search_institution)]
+        if st.session_state.search_institution:
+            paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name) & papers['研究机构'].str.contains(st.session_state.search_institution)]
+            project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name) & projects['研究机构'].str.contains(st.session_state.search_institution)]
+        else:
+            paper_matches = papers[papers['姓名'].str.contains(st.session_state.search_name)]
+            project_matches = projects[projects['姓名'].str.contains(st.session_state.search_name)]
 
         if len(paper_matches) == 0 and len(project_matches) == 0:
             st.warning("未找到匹配的研究人员")
