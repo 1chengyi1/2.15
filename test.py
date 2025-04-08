@@ -152,8 +152,8 @@ def process_risk_data():
     }
 
     # 读取原始数据
-    papers_df = pd.read_excel('C:\\Users\\86130\\Desktop\\project\\马丹薇\\实验数据.xlsx', sheet_name='论文')
-    projects_df = pd.read_excel('C:\\Users\\86130\\Desktop\\project\\马丹薇\\实验数据.xlsx', sheet_name='项目')
+    papers_df = pd.read_excel('实验数据.xlsx', sheet_name='论文')
+    projects_df = pd.read_excel('实验数据.xlsx', sheet_name='项目')
 
     # 网络构建函数
     @st.cache_resource(show_spinner=False)
